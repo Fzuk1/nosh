@@ -7,7 +7,7 @@
  *
  * TODOS:
  * - Write a tokenize_cmd function, to correctly handle flags like "ls -la" or "cd ~/"
- * - Make a GitHub Repo
+ * - 
  */
 
 
@@ -20,7 +20,7 @@
 
 
 void findcmd(char *cmd);
-char **prspath(const char *PATH, int amount_of_paths);
+char **prspth(const char *PATH, int amount_of_paths);
 
 
 int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
@@ -47,7 +47,7 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
 
 // -----DONE-----
-char **prspath(const char *PATH, int amount_of_paths) {
+char **prspth(const char *PATH, int amount_of_paths) {
   int path_len = strlen(PATH);
 
   // Malloc memory for the parsed paths
@@ -100,7 +100,7 @@ void findcmd(char *cmd) {
   }
 
   
-  char **parsed_paths = prspath(PATH, amount_of_paths);
+  char **parsed_paths = prspth(PATH, amount_of_paths);
   // TODO Search for "cmd" in the paths
   
 
