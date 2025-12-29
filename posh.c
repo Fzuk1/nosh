@@ -6,23 +6,25 @@
  * - findcmd
  *
  * TODOS:
- * - Write a tokcmd function, to correctly handle flags like "ls -la" or "cd ~/"
+ * - (CHECK) Write a tokcmd function, to correctly handle flags like "ls -la" or "cd ~/"
  * - Write the shell builtin commands (cd, echo, exit, help, pwd, ...)
+ * - Add malloc error checking
  */
 
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <assert.h>
 
 #define MAX_SINGLE_PATH_SIZE 100
 #define MAX_CMD_SIZE 100
+#define MAX_FLAG_SIZE 30
 
 
 void findcmd(char *cmd);
 char **prspth(const char *PATH, int amount_of_paths);
-char **tokcmd(const char *cmd, int amount_of_flags);
+char **tokcmd(char *a_str, const char a_delim);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -46,10 +48,12 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
   char **parsed_paths = prspth(PATH, amount_of_paths);
 
   // Print parsed paths
-  for (int i = 0; i < amount_of_paths; i++) {
-    printf("Path %d: %s\n", i, parsed_paths[i]);
+  // TODO introduce more malloc error checking like this 
+  if (parsed_paths) {
+    for (int i = 0; i < amount_of_paths; i++) {
+      printf("Path %d: %s\n", i, parsed_paths[i]);
+    }
   }
-
   
   char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
 
@@ -83,71 +87,76 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
 void findcmd(char *cmd) {
 
-  // Get amount of flags in cmd
-  int cmd_len = strlen(cmd);
-  int amount_of_flags = 1;
-  for (int i = 0; i < cmd_len; i++) {
-    if (cmd[i] == ' ') {
-      amount_of_flags += 1;
+  char **tokens = tokcmd(cmd, ' ');
+  // TODO Search for "cmd" in the paths and pass tokens to cmd
+  printf("Cmd: %s\n", tokens[0]);
+  
+  if (tokens) {
+    int i;
+    for (i = 0; *(tokens + i); i++) {
+      printf("flag %d: %s\n", i, *(tokens + i));
+      free(*(tokens + i));
     }
+    free(tokens);
   }
-  
-  
-  char **tok_cmd = tokcmd(cmd, amount_of_flags);
-  // TODO Search for "cmd" in the paths
-  
-  
-  // And of the cmd
-  for (int i = 0; i < amount_of_flags; i++) {
-    free(tok_cmd[i]);
-  }
-  free(tok_cmd);
 
-
+  
   return;
 }
 
 /*------------------------------------------------------------------------------------------*/
+/*                                       DONE                                               */
+/*------------------------------------------------------------------------------------------*/
 
-char **tokcmd(const char *cmd, int amount_of_flags) {
+char **tokcmd(char *a_str, const char a_delim) {
 
-  // TODO Fix the bug where after the tokenized flags there appear random bytes of data
+  char** result = 0;
+  size_t count = 0;
+  char* tmp = a_str;
+  char* last_spc = 0;
+  char delim[2];
+  delim[0] = a_delim;
+  delim[1] = 0;
 
-  int cmd_len = strlen(cmd);
-
-  char **ret = malloc(amount_of_flags * sizeof(*ret));
-  for (int i = 0; i < amount_of_flags; i++) {
-    ret[i] = malloc(MAX_CMD_SIZE * sizeof(char));
-  }
-
-  int flag_i = 0;
-  int last_spc = -1;
-  for (int i = 0; i < cmd_len; i++) {
-    if (cmd[i] == ' ') {
-      int idx = 0;
-      for (int j = last_spc + 1; j < i; j++) {
-	ret[flag_i][idx] = cmd[j];
-	idx += 1;
-      }
-      printf("Cmd flag %d: %s\n", flag_i, ret[flag_i]);
-      flag_i += 1;
-      last_spc = i;
+  /* Count how many elements will be extracted. */
+  while (*tmp) {
+    if (a_delim == *tmp) {
+      count++;
+      last_spc = tmp;
     }
+    tmp++;
   }
 
-  int idx = 0;
-  for (int j = last_spc + 1; j < cmd_len; j++) {
-    ret[flag_i][idx] = cmd[j];
-    idx += 1;
+  /* Add space for trailing token. */
+  count += last_spc < (a_str + strlen(a_str) - 1);
+
+  /* Add space for terminating null string so caller
+     knows where the list of returned strings ends. */
+  count++;
+
+  result = malloc(sizeof(char*) * count);
+
+  if (result) {
+    size_t idx  = 0;
+    char* token = strtok(a_str, delim);
+
+    while (token) {
+      assert(idx < count);
+      *(result + idx++) = strdup(token);
+      token = strtok(0, delim);
+    }
+    assert(idx == count - 1);
+    *(result + idx) = 0;
   }
-  printf("Cmd flag %d: %s\n", flag_i, ret[flag_i]);
+
+  return result;
   
-  return ret;
 }
 
 /*------------------------------------------------------------------------------------------*/
+/*                                       DONE                                               */
+/*------------------------------------------------------------------------------------------*/
 
-// -----DONE-----
 char **prspth(const char *PATH, int amount_of_paths) {
   int path_len = strlen(PATH);
 
