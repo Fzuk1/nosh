@@ -14,17 +14,20 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
-#define MAX_SINGLE_PATH_SIZE 100
 #define MAX_CMD_SIZE 100
-#define MAX_FLAG_SIZE 30
 
 
-void findcmd(char *cmd);
-char **prspth(const char *PATH, int amount_of_paths);
-char **tokcmd(char *a_str, const char a_delim);
+void findcmd(char *cmd, char **path_tokens);
+void execcmd(char **cmd_tokens, char *path);
+char **str_split(char *a_str, const char a_delim);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -36,46 +39,49 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
   const char *PATH = getenv("PATH");
 
-  // Get amount of /something/bin paths in $PATH
-  int path_len = strlen(PATH);
-  int amount_of_paths = 1;
-  for (int i = 0; i < path_len; i++) {
-    if (PATH[i] == ':') {
-      amount_of_paths += 1;
-    }
-  }
-
-  char **parsed_paths = prspth(PATH, amount_of_paths);
-
-  // Print parsed paths
-  // TODO introduce more malloc error checking like this 
-  if (parsed_paths) {
-    for (int i = 0; i < amount_of_paths; i++) {
-      printf("Path %d: %s\n", i, parsed_paths[i]);
-    }
-  }
+  
+  char *path = strdup(PATH);
+  char **path_tokens = str_split(path, ':');
+  free(path);
   
   char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
-
   
-  while ((strcmp(cmd, "QUIT") != 0) && (strcmp(cmd, "exit") != 0)) {
+  while ((strcmp(cmd, "exit") != 0)) {
 
     free(cmd);
     cmd = malloc(MAX_CMD_SIZE * sizeof(char));
     printf("$ ");
-    //  %[^\n] makes scanf read until end of line instead of until whitespace
-    scanf(" %[^\n]", cmd);
-    findcmd(cmd);
+    
+    // Don't use scanf because it comes with a lot of error possibilities
+    // Commands longer than MAX_CMD_SIZE are not read by fgets
+    if (fgets(cmd, MAX_CMD_SIZE, stdin)) {
+      if (!strchr(cmd, '\n')) {
+	int tmp;
+	// Get rid of the rest of the line
+	while ((tmp = getchar()) != '\n' && tmp != EOF) {
+	  ;
+	}
+	printf("Command too long!\n");
+	continue;
+      }
+      
+      cmd[strcspn(cmd, "\n")] = 0;
+      findcmd(cmd, path_tokens);
+    }
 
   }
 
   
   // Free Malloced Memory of the paths
-  for (int i = 0; i < amount_of_paths; i++) {
-    free(parsed_paths[i]);
+  if (path_tokens) {
+    int i;
+    for (i = 0; *(path_tokens + i); i++) {
+      // printf("Path %d: %s\n", i, *(path_tokens + i));
+      free(*(path_tokens + i));
+    }
+    free(path_tokens);
   }
-  free(parsed_paths);
-  
+
   
   free(cmd);
 
@@ -85,19 +91,101 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
 /*------------------------------------------------------------------------------------------*/
 
-void findcmd(char *cmd) {
+void execcmd(char **cmd_tokens, char *path) {
+  // Add the command to the path
+  char *program = malloc(sizeof(char) * (strlen(path) + strlen(cmd_tokens[0]) + 1));
 
-  char **tokens = tokcmd(cmd, ' ');
-  // TODO Search for "cmd" in the paths and pass tokens to cmd
-  printf("Cmd: %s\n", tokens[0]);
+  program[0] = '\0';
   
-  if (tokens) {
-    int i;
-    for (i = 0; *(tokens + i); i++) {
-      printf("flag %d: %s\n", i, *(tokens + i));
-      free(*(tokens + i));
+  int wstatus;
+  pid_t cpid, w;
+
+  cpid = fork();
+  if (cpid == -1) {
+    perror("fork");
+    exit(EXIT_FAILURE);
+  }
+
+  if (cpid == 0) {
+    strcat(program, path);
+    strcat(program, "/");
+    strcat(program, cmd_tokens[0]);
+    // printf("Program: %s\n", program);
+
+    execve(program, cmd_tokens, NULL);
+
+    perror("execve");  // Print an error message if execve fails
+    exit(EXIT_FAILURE);
+  }
+  else {
+    do {
+      w = waitpid(cpid, &wstatus, WUNTRACED | WCONTINUED);
+      if (w == -1) {
+	perror("waitpid");
+	exit(EXIT_FAILURE);
+      }
+      if (WIFEXITED(wstatus)) {
+	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
+	free(program);
+	return;
+      }
+      else if (WIFSIGNALED(wstatus)) {
+	printf("killed by signal %d\n", WTERMSIG(wstatus));
+      }
+      else if (WIFSTOPPED(wstatus)) {
+	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+      }
+      else if (WIFCONTINUED(wstatus)) {
+	printf("continued\n");
+      }
+    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    
+    free(program);
+    exit(EXIT_SUCCESS);
+
     }
-    free(tokens);
+
+
+  return;
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void findcmd(char *cmd, char **path_tokens) {
+
+  char **cmd_tokens = str_split(cmd, ' ');
+  // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
+
+  
+  DIR *curr_dir;
+  int i = 0;
+  bool done = false;
+  while (path_tokens[i] != NULL && !done) {
+    // printf("Path %d: %s\n", i, *(path_tokens + i));
+    curr_dir = opendir(path_tokens[i]);
+    if (curr_dir) {
+      // printf("Opened: %s\n", path_tokens[i]);
+      struct dirent *direntry;
+      while ((direntry = readdir(curr_dir))) {
+        if (strcmp(cmd, direntry->d_name) == 0) {
+	  execcmd(cmd_tokens, path_tokens[i]);
+	  done = true;
+	  break;
+	}
+      }
+      closedir(curr_dir);
+    }
+    i++;
+  }
+  
+  
+  // Free malloced memory of the cmd_tokens
+  if (cmd_tokens) {
+    int i;
+    for (i = 0; *(cmd_tokens + i); i++) {
+      free(*(cmd_tokens + i));
+    }
+    free(cmd_tokens);
   }
 
   
@@ -108,7 +196,7 @@ void findcmd(char *cmd) {
 /*                                       DONE                                               */
 /*------------------------------------------------------------------------------------------*/
 
-char **tokcmd(char *a_str, const char a_delim) {
+char **str_split(char *a_str, const char a_delim) {
 
   char** result = 0;
   size_t count = 0;
@@ -143,53 +231,14 @@ char **tokcmd(char *a_str, const char a_delim) {
     while (token) {
       assert(idx < count);
       *(result + idx++) = strdup(token);
-      token = strtok(0, delim);
+      token = strtok(NULL, delim);
     }
     assert(idx == count - 1);
-    *(result + idx) = 0;
+    *(result + idx) = NULL;
   }
 
   return result;
   
-}
-
-/*------------------------------------------------------------------------------------------*/
-/*                                       DONE                                               */
-/*------------------------------------------------------------------------------------------*/
-
-char **prspth(const char *PATH, int amount_of_paths) {
-  int path_len = strlen(PATH);
-
-  // Malloc memory for the parsed paths
-  char **ret = malloc(amount_of_paths * sizeof(*ret));
-  for (int i = 0; i < amount_of_paths; i++) {
-    ret[i] = malloc(MAX_SINGLE_PATH_SIZE * sizeof(char));
-  }
-
-  // Parse the paths
-  int path_i = 0;
-  int last_col = -1;
-  for (int i = 0; i < path_len; i++) {
-    if (PATH[i] ==  ':') {
-      int idx = 0;
-      for (int j = last_col + 1; j < i; j++) {
-	ret[path_i][idx] = PATH[j];
-	idx += 1;
-      }
-      // printf("Path %d: %s\n", path_i, ret[path_i]);
-      path_i += 1;
-      last_col = i;
-    }
-  }
-
-  // Parse the last path
-  int idx = 0;
-  for (int j = last_col + 1; j < path_len; j++) {
-    ret[path_i][idx] = PATH[j];
-    idx += 1;
-  }
-  
-  return ret;
 }
 
 
