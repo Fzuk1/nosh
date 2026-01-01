@@ -6,8 +6,7 @@
  * - findcmd
  *
  * TODOS:
- * - (CHECK) Write a tokcmd function, to correctly handle flags like "ls -la" or "cd ~/"
- * - Write the shell builtin commands (cd, echo, exit, help, pwd, ...)
+ * - Write the shell builtin commands (cd, echo, exit(J), help, pwd, ...)
  * - Add malloc error checking
  */
 
@@ -21,6 +20,9 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/wait.h>
+
+#include "Builtin.h"
+
 
 #define MAX_CMD_SIZE 100
 
@@ -45,32 +47,38 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
   free(path);
   
   char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
-  
-  while ((strcmp(cmd, "exit") != 0)) {
+  if (cmd) {
+    bool running = true;
+    while (running) {
 
-    free(cmd);
-    cmd = malloc(MAX_CMD_SIZE * sizeof(char));
-    printf("$ ");
+      free(cmd);
+      cmd = malloc(MAX_CMD_SIZE * sizeof(char));
+      if (cmd) {
+	printf("$ ");
     
-    // Don't use scanf because it comes with a lot of error possibilities
-    // Commands longer than MAX_CMD_SIZE are not read by fgets
-    if (fgets(cmd, MAX_CMD_SIZE, stdin)) {
-      if (!strchr(cmd, '\n')) {
-	int tmp;
-	// Get rid of the rest of the line
-	while ((tmp = getchar()) != '\n' && tmp != EOF) {
-	  ;
-	}
-	printf("Command too long!\n");
-	continue;
-      }
+	// Don't use scanf because it comes with a lot of error possibilities
+	// Commands longer than MAX_CMD_SIZE are not read by fgets
+	if (fgets(cmd, MAX_CMD_SIZE, stdin)) {
+	  if (!strchr(cmd, '\n')) {
+	    int tmp;
+	    // Get rid of the rest of the line
+	    while ((tmp = getchar()) != '\n' && tmp != EOF) {
+	      ;
+	    }
+	    printf("Command too long!\n");
+	    continue;
+	  }
       
-      cmd[strcspn(cmd, "\n")] = 0;
-      findcmd(cmd, path_tokens);
+	  cmd[strcspn(cmd, "\n")] = 0;
+	  if (strcmp(cmd, "exit") == 0) {
+	      running = false;
+	      break;
+	  }
+	  findcmd(cmd, path_tokens);
+	}
+      }
     }
-
   }
-
   
   // Free Malloced Memory of the paths
   if (path_tokens) {
@@ -160,22 +168,48 @@ void findcmd(char *cmd, char **path_tokens) {
   DIR *curr_dir;
   int i = 0;
   bool done = false;
-  while (path_tokens[i] != NULL && !done) {
-    // printf("Path %d: %s\n", i, *(path_tokens + i));
-    curr_dir = opendir(path_tokens[i]);
-    if (curr_dir) {
-      // printf("Opened: %s\n", path_tokens[i]);
-      struct dirent *direntry;
-      while ((direntry = readdir(curr_dir))) {
-        if (strcmp(cmd, direntry->d_name) == 0) {
-	  execcmd(cmd_tokens, path_tokens[i]);
-	  done = true;
-	  break;
+
+
+  if (strcmp(cmd, "cd") == 0) {
+    poshcd();
+  }
+  else if (strcmp(cmd, "echo") == 0) {
+    poshecho();
+  }
+  else if (strcmp(cmd, "help") == 0) {
+    poshhelp();
+  }
+  else if (strcmp(cmd, "pwd") == 0) {
+    poshpwd();
+  }
+  else if (strcmp(cmd, "clear") == 0) {
+    // Set the EnvVar to the same value as Bash
+    setenv("TERM", "xterm-256color", 1);
+    poshclear();
+  }
+  else if (cmd[0] == '.' && cmd[1] == '/') {
+    printf("File execution \"./\" is not implemeted yet\n");
+  }
+  else {
+    while (path_tokens[i] != NULL && !done) {
+      // printf("Path %d: %s\n", i, *(path_tokens + i));
+      curr_dir = opendir(path_tokens[i]);
+      if (curr_dir) {
+	// printf("Opened: %s\n", path_tokens[i]);
+	struct dirent *direntry;
+	while ((direntry = readdir(curr_dir))) {
+	  if (strcmp(cmd, direntry->d_name) == 0) {
+	    execcmd(cmd_tokens, path_tokens[i]);
+	    done = true;
+	    break;
+	  }
 	}
+	closedir(curr_dir);
       }
-      closedir(curr_dir);
+      i++;
     }
-    i++;
+  
+    if (!done) printf("%s: Command not found\n", cmd);
   }
   
   

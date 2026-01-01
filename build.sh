@@ -1,1 +1,2 @@
-gcc -Wall -Wextra -o posh posh.c 
+gcc src/*.c -o posh -Wall -Wextra -I src/include
+
