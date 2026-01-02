@@ -11,7 +11,7 @@
   } while(0)
 
 
-void poshcd();
+void poshcd(char *path);
 void poshecho();
 void poshhelp();
 void poshpwd();

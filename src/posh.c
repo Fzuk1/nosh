@@ -3,11 +3,13 @@
  * - https://www.ibm.com/docs/en/aix/7.2.0?topic=administration-operating-system-shells
  *
  * Currently working on:
- * - findcmd
+ * - builtin.c
  *
  * TODOS:
- * - Write the shell builtin commands (cd, echo, exit(J), help, pwd, ...)
+ * - (FIXED line: 75) When cmd == "" strsplit assertion failes
  * - Add malloc error checking
+ * - Cant open posh in posh due to signal 11:
+ *   Line 142: printf("killed by signal %d\n", WTERMSIG(wstatus));
  */
 
 
@@ -29,7 +31,7 @@
 
 void findcmd(char *cmd, char **path_tokens);
 void execcmd(char **cmd_tokens, char *path);
-char **str_split(char *a_str, const char a_delim);
+char **strsplit(char *a_str, const char a_delim);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -43,10 +45,11 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
   
   char *path = strdup(PATH);
-  char **path_tokens = str_split(path, ':');
+  char **path_tokens = strsplit(path, ':');
   free(path);
   
   char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
+
   if (cmd) {
     bool running = true;
     while (running) {
@@ -68,13 +71,17 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 	    printf("Command too long!\n");
 	    continue;
 	  }
-      
+	  if (cmd[0] == '\n' && cmd[1] == '\0') {
+	    continue;
+	  }
+	  
 	  cmd[strcspn(cmd, "\n")] = 0;
 	  if (strcmp(cmd, "exit") == 0) {
-	      running = false;
-	      break;
+	    running = false;
+	    break;
 	  }
 	  findcmd(cmd, path_tokens);
+	  
 	}
       }
     }
@@ -161,7 +168,7 @@ void execcmd(char **cmd_tokens, char *path) {
 
 void findcmd(char *cmd, char **path_tokens) {
 
-  char **cmd_tokens = str_split(cmd, ' ');
+  char **cmd_tokens = strsplit(cmd, ' ');
   // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
 
   
@@ -171,7 +178,7 @@ void findcmd(char *cmd, char **path_tokens) {
 
 
   if (strcmp(cmd, "cd") == 0) {
-    poshcd();
+    poshcd(cmd_tokens[1]);
   }
   else if (strcmp(cmd, "echo") == 0) {
     poshecho();
@@ -230,7 +237,7 @@ void findcmd(char *cmd, char **path_tokens) {
 /*                                       DONE                                               */
 /*------------------------------------------------------------------------------------------*/
 
-char **str_split(char *a_str, const char a_delim) {
+char **strsplit(char *a_str, const char a_delim) {
 
   char** result = 0;
   size_t count = 0;
