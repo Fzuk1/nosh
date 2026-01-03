@@ -29,7 +29,8 @@
 #define MAX_CMD_SIZE 100
 
 
-void findcmd(char *cmd, char **path_tokens);
+void handleinput(char *cmd, char **path_tokens);
+char *findcmd(char *cmd, char **path_tokens);
 void execcmd(char **cmd_tokens, char *path);
 char **strsplit(char *a_str, const char a_delim);
 
@@ -42,11 +43,11 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
   //printf("%s\n%s\n", PATH, PWD);
 
   const char *PATH = getenv("PATH");
-
   
   char *path = strdup(PATH);
   char **path_tokens = strsplit(path, ':');
   free(path);
+
   
   char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
 
@@ -80,7 +81,7 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 	    running = false;
 	    break;
 	  }
-	  findcmd(cmd, path_tokens);
+	  handleinput(cmd, path_tokens);
 	  
 	}
       }
@@ -106,6 +107,58 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
 /*------------------------------------------------------------------------------------------*/
 
+void handleinput(char *cmd, char **path_tokens) {
+
+  char **cmd_tokens = strsplit(cmd, ' ');
+  // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
+
+
+  if (strcmp(cmd, "cd") == 0) {
+    poshcd(cmd_tokens[1]);
+  }
+  else if (strcmp(cmd, "echo") == 0) {
+    poshecho();
+  }
+  else if (strcmp(cmd, "help") == 0) {
+    poshhelp();
+  }
+  else if (strcmp(cmd, "pwd") == 0) {
+    poshpwd();
+  }
+  else if (strcmp(cmd, "clear") == 0) {
+
+    // Set the EnvVar to the same value as Bash
+    setenv("TERM", "xterm-256color", 1);
+    poshclear();
+
+  }
+  else if (cmd[0] == '.' && cmd[1] == '/') {
+    printf("File execution \"./\" is not implemeted yet\n");
+  }
+  else {
+
+    char *path = NULL;
+    path = findcmd(cmd, path_tokens);
+    if (path)
+      execcmd(cmd_tokens, path);
+
+  }
+
+  // Free malloced memory of the cmd_tokens
+  if (cmd_tokens) {
+
+    int i;
+    for (i = 0; *(cmd_tokens + i); i++) {
+      free(*(cmd_tokens + i));
+    }
+    free(cmd_tokens);
+
+  }
+
+}
+
+/*------------------------------------------------------------------------------------------*/
+
 void execcmd(char **cmd_tokens, char *path) {
   // Add the command to the path
   char *program = malloc(sizeof(char) * (strlen(path) + strlen(cmd_tokens[0]) + 1));
@@ -122,6 +175,7 @@ void execcmd(char **cmd_tokens, char *path) {
   }
 
   if (cpid == 0) {
+
     strcat(program, path);
     strcat(program, "/");
     strcat(program, cmd_tokens[0]);
@@ -131,8 +185,10 @@ void execcmd(char **cmd_tokens, char *path) {
 
     perror("execve");  // Print an error message if execve fails
     exit(EXIT_FAILURE);
+
   }
   else {
+
     do {
       w = waitpid(cpid, &wstatus, WUNTRACED | WCONTINUED);
       if (w == -1) {
@@ -158,7 +214,7 @@ void execcmd(char **cmd_tokens, char *path) {
     free(program);
     exit(EXIT_SUCCESS);
 
-    }
+  }
 
 
   return;
@@ -166,71 +222,42 @@ void execcmd(char **cmd_tokens, char *path) {
 
 /*------------------------------------------------------------------------------------------*/
 
-void findcmd(char *cmd, char **path_tokens) {
-
-  char **cmd_tokens = strsplit(cmd, ' ');
-  // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
-
-  
+char *findcmd(char *cmd, char **path_tokens) {
+ 
   DIR *curr_dir;
   int i = 0;
   bool done = false;
+  char *ret_path = NULL;
+  
+  while (path_tokens[i] != NULL && !done) {
+    // printf("Path %d: %s\n", i, *(path_tokens + i));
+    curr_dir = opendir(path_tokens[i]);
+    if (curr_dir) {
 
+      // printf("Opened: %s\n", path_tokens[i]);
+      struct dirent *direntry;
+      while ((direntry = readdir(curr_dir))) {
 
-  if (strcmp(cmd, "cd") == 0) {
-    poshcd(cmd_tokens[1]);
-  }
-  else if (strcmp(cmd, "echo") == 0) {
-    poshecho();
-  }
-  else if (strcmp(cmd, "help") == 0) {
-    poshhelp();
-  }
-  else if (strcmp(cmd, "pwd") == 0) {
-    poshpwd();
-  }
-  else if (strcmp(cmd, "clear") == 0) {
-    // Set the EnvVar to the same value as Bash
-    setenv("TERM", "xterm-256color", 1);
-    poshclear();
-  }
-  else if (cmd[0] == '.' && cmd[1] == '/') {
-    printf("File execution \"./\" is not implemeted yet\n");
-  }
-  else {
-    while (path_tokens[i] != NULL && !done) {
-      // printf("Path %d: %s\n", i, *(path_tokens + i));
-      curr_dir = opendir(path_tokens[i]);
-      if (curr_dir) {
-	// printf("Opened: %s\n", path_tokens[i]);
-	struct dirent *direntry;
-	while ((direntry = readdir(curr_dir))) {
-	  if (strcmp(cmd, direntry->d_name) == 0) {
-	    execcmd(cmd_tokens, path_tokens[i]);
-	    done = true;
-	    break;
-	  }
+	if (strcmp(cmd, direntry->d_name) == 0) {
+
+	  ret_path = path_tokens[i];
+	  done = true;
+	  break;
+
 	}
-	closedir(curr_dir);
-      }
-      i++;
-    }
-  
-    if (!done) printf("%s: Command not found\n", cmd);
-  }
-  
-  
-  // Free malloced memory of the cmd_tokens
-  if (cmd_tokens) {
-    int i;
-    for (i = 0; *(cmd_tokens + i); i++) {
-      free(*(cmd_tokens + i));
-    }
-    free(cmd_tokens);
-  }
 
+      }
+      closedir(curr_dir);
+
+    }
+    i++;
+  }
   
-  return;
+  if (!done)
+    printf("-posh: %s: Command not found!\n", cmd);
+  
+  
+  return ret_path;
 }
 
 /*------------------------------------------------------------------------------------------*/
@@ -249,11 +276,13 @@ char **strsplit(char *a_str, const char a_delim) {
 
   /* Count how many elements will be extracted. */
   while (*tmp) {
+
     if (a_delim == *tmp) {
       count++;
       last_spc = tmp;
     }
     tmp++;
+
   }
 
   /* Add space for trailing token. */
@@ -266,16 +295,21 @@ char **strsplit(char *a_str, const char a_delim) {
   result = malloc(sizeof(char*) * count);
 
   if (result) {
+
     size_t idx  = 0;
     char* token = strtok(a_str, delim);
 
     while (token) {
+
       assert(idx < count);
       *(result + idx++) = strdup(token);
       token = strtok(NULL, delim);
+
     }
+
     assert(idx == count - 1);
     *(result + idx) = NULL;
+
   }
 
   return result;

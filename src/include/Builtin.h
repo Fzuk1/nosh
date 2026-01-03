@@ -11,6 +11,9 @@
   } while(0)
 
 
+int countsubstrings(const char *str, const char *sub);
+void removedotdot(char *str);
+void removesubstring(char *str, int start, int end);
 void poshcd(char *path);
 void poshecho();
 void poshhelp();
