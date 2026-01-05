@@ -1,6 +1,8 @@
 /* Sources:
  * - https://medium.com/@nyangaresibrian/simple-shell-b7014425601f 
  * - https://www.ibm.com/docs/en/aix/7.2.0?topic=administration-operating-system-shells
+ * - https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html
+ * - https://sekrit.de/webdocs/c/beginners-guide-away-from-scanf.html
  *
  * Currently working on:
  * - builtin.c
@@ -19,8 +21,8 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/types.h>
-#include <dirent.h>
-#include <unistd.h>
+#include <dirent.h> 
+#include <unistd.h> 
 #include <sys/wait.h>
 
 #include "Builtin.h"
@@ -29,10 +31,10 @@
 #define MAX_CMD_SIZE 100
 
 
-void handleinput(char *cmd, char **path_tokens);
-char *findcmd(char *cmd, char **path_tokens);
-void execcmd(char **cmd_tokens, char *path);
-char **strsplit(char *a_str, const char a_delim);
+void handle_input(char *cmd, char **pathTokens);
+char *find_cmd(char *cmd, char **pathTokens);
+void exec_cmd(char **cmdTokens, char *path);
+char **str_split(char *aStr, const char aDelim);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -45,7 +47,7 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
   const char *PATH = getenv("PATH");
   
   char *path = strdup(PATH);
-  char **path_tokens = strsplit(path, ':');
+  char **pathTokens = str_split(path, ':');
   free(path);
 
   
@@ -81,7 +83,7 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 	    running = false;
 	    break;
 	  }
-	  handleinput(cmd, path_tokens);
+	  handle_input(cmd, pathTokens);
 	  
 	}
       }
@@ -89,13 +91,13 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
   }
   
   // Free Malloced Memory of the paths
-  if (path_tokens) {
+  if (pathTokens) {
     int i;
-    for (i = 0; *(path_tokens + i); i++) {
+    for (i = 0; *(pathTokens + i); i++) {
       // printf("Path %d: %s\n", i, *(path_tokens + i));
-      free(*(path_tokens + i));
+      free(*(pathTokens + i));
     }
-    free(path_tokens);
+    free(pathTokens);
   }
 
   
@@ -107,29 +109,29 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
 /*------------------------------------------------------------------------------------------*/
 
-void handleinput(char *cmd, char **path_tokens) {
+void handle_input(char *cmd, char **pathTokens) {
 
-  char **cmd_tokens = strsplit(cmd, ' ');
+  char **cmdTokens = str_split(cmd, ' ');
   // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
 
 
   if (strcmp(cmd, "cd") == 0) {
-    poshcd(cmd_tokens[1]);
+    posh_cd(cmdTokens[1]);
   }
   else if (strcmp(cmd, "echo") == 0) {
-    poshecho();
+    posh_echo();
   }
   else if (strcmp(cmd, "help") == 0) {
-    poshhelp();
+    posh_help();
   }
   else if (strcmp(cmd, "pwd") == 0) {
-    poshpwd();
+    posh_pwd();
   }
   else if (strcmp(cmd, "clear") == 0) {
 
     // Set the EnvVar to the same value as Bash
     setenv("TERM", "xterm-256color", 1);
-    poshclear();
+    posh_clear();
 
   }
   else if (cmd[0] == '.' && cmd[1] == '/') {
@@ -138,20 +140,20 @@ void handleinput(char *cmd, char **path_tokens) {
   else {
 
     char *path = NULL;
-    path = findcmd(cmd, path_tokens);
+    path = find_cmd(cmd, pathTokens);
     if (path)
-      execcmd(cmd_tokens, path);
+      exec_cmd(cmdTokens, path);
 
   }
 
   // Free malloced memory of the cmd_tokens
-  if (cmd_tokens) {
+  if (cmdTokens) {
 
     int i;
-    for (i = 0; *(cmd_tokens + i); i++) {
-      free(*(cmd_tokens + i));
+    for (i = 0; *(cmdTokens + i); i++) {
+      free(*(cmdTokens + i));
     }
-    free(cmd_tokens);
+    free(cmdTokens);
 
   }
 
@@ -159,9 +161,9 @@ void handleinput(char *cmd, char **path_tokens) {
 
 /*------------------------------------------------------------------------------------------*/
 
-void execcmd(char **cmd_tokens, char *path) {
+void exec_cmd(char **cmdTokens, char *path) {
   // Add the command to the path
-  char *program = malloc(sizeof(char) * (strlen(path) + strlen(cmd_tokens[0]) + 1));
+  char *program = malloc(sizeof(char) * (strlen(path) + strlen(cmdTokens[0]) + 1));
 
   program[0] = '\0';
   
@@ -178,10 +180,10 @@ void execcmd(char **cmd_tokens, char *path) {
 
     strcat(program, path);
     strcat(program, "/");
-    strcat(program, cmd_tokens[0]);
+    strcat(program, cmdTokens[0]);
     // printf("Program: %s\n", program);
 
-    execve(program, cmd_tokens, NULL);
+    execve(program, cmdTokens, NULL);
 
     perror("execve");  // Print an error message if execve fails
     exit(EXIT_FAILURE);
@@ -222,32 +224,32 @@ void execcmd(char **cmd_tokens, char *path) {
 
 /*------------------------------------------------------------------------------------------*/
 
-char *findcmd(char *cmd, char **path_tokens) {
+char *find_cmd(char *cmd, char **pathTokens) {
  
-  DIR *curr_dir;
+  DIR *currDir;
   int i = 0;
   bool done = false;
-  char *ret_path = NULL;
+  char *retPath = NULL;
   
-  while (path_tokens[i] != NULL && !done) {
+  while (pathTokens[i] != NULL && !done) {
     // printf("Path %d: %s\n", i, *(path_tokens + i));
-    curr_dir = opendir(path_tokens[i]);
-    if (curr_dir) {
+    currDir = opendir(pathTokens[i]);
+    if (currDir) {
 
       // printf("Opened: %s\n", path_tokens[i]);
       struct dirent *direntry;
-      while ((direntry = readdir(curr_dir))) {
+      while ((direntry = readdir(currDir))) {
 
 	if (strcmp(cmd, direntry->d_name) == 0) {
 
-	  ret_path = path_tokens[i];
+	  retPath = pathTokens[i];
 	  done = true;
 	  break;
 
 	}
 
       }
-      closedir(curr_dir);
+      closedir(currDir);
 
     }
     i++;
@@ -257,36 +259,36 @@ char *findcmd(char *cmd, char **path_tokens) {
     printf("-posh: %s: Command not found!\n", cmd);
   
   
-  return ret_path;
+  return retPath;
 }
 
 /*------------------------------------------------------------------------------------------*/
 /*                                       DONE                                               */
 /*------------------------------------------------------------------------------------------*/
 
-char **strsplit(char *a_str, const char a_delim) {
+char **str_split(char *aStr, const char aDelim) {
 
   char** result = 0;
   size_t count = 0;
-  char* tmp = a_str;
-  char* last_spc = 0;
+  char* tmp = aStr;
+  char* lastSpc = 0;
   char delim[2];
-  delim[0] = a_delim;
+  delim[0] = aDelim;
   delim[1] = 0;
 
   /* Count how many elements will be extracted. */
   while (*tmp) {
 
-    if (a_delim == *tmp) {
+    if (aDelim == *tmp) {
       count++;
-      last_spc = tmp;
+      lastSpc = tmp;
     }
     tmp++;
 
   }
 
   /* Add space for trailing token. */
-  count += last_spc < (a_str + strlen(a_str) - 1);
+  count += lastSpc < (aStr + strlen(aStr) - 1);
 
   /* Add space for terminating null string so caller
      knows where the list of returned strings ends. */
@@ -297,7 +299,7 @@ char **strsplit(char *a_str, const char a_delim) {
   if (result) {
 
     size_t idx  = 0;
-    char* token = strtok(a_str, delim);
+    char* token = strtok(aStr, delim);
 
     while (token) {
 
