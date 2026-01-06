@@ -2,7 +2,6 @@
 #define BUILTIN_H
 
 #include <stdio.h>
-#include <stdlib.h>
 
 #define UNIMPLEMENTED						\
   do {								\
@@ -11,9 +10,9 @@
   } while(0)
 
 
-int count_substrings(const char *str, const char *sub);
-void remove_dotdot(char *str);
-void remove_substring(char *str, int start, int end);
+int posh_count_substrings(const char *str, const char *sub);
+void posh_remove_dotdot(char *str);
+void posh_remove_substring(char *str, int start, int end);
 void posh_cd(char *path);
 void posh_echo();
 void posh_help();

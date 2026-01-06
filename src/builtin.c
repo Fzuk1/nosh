@@ -11,17 +11,16 @@
  * - ... (TBD)
  */
 
+#include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
 #include <assert.h>
 #include <stdlib.h>
 
 #include "Builtin.h"
 
-int count_substrings(const char *str, const char *sub) {
+int posh_count_substrings(const char *str, const char *sub) {
     int count = 0;
     size_t subLen = strlen(sub);
 
@@ -37,14 +36,14 @@ int count_substrings(const char *str, const char *sub) {
     return count;
 }
 
-void remove_substring(char *str, int start, int end) {
+void posh_remove_substring(char *str, int start, int end) {
 
   assert(end > start);
   memmove(str + start, str + end + 1, strlen(str) - end + 1);
   
 }
 
-void remove_dotdot(char *str) {
+void posh_remove_dotdot(char *str) {
   // Search for ".." in path and remove it plus previous directory
   char *position = NULL;
   position = strstr(str, "..");
@@ -59,7 +58,7 @@ void remove_dotdot(char *str) {
 
     // Remove "/smth/.."
     if (start >= 0)
-      remove_substring(str, start, dotIndex + 1);
+      posh_remove_substring(str, start, dotIndex + 1);
 
     if (strlen(str) == 0)
       str[0] = '/';
@@ -78,8 +77,8 @@ void posh_cd(char *path) {
 
   // Check if there are more ".." than pwd is directories deep
   const char *PWD = getenv("PWD");
-  int depth = count_substrings(PWD, "/");
-  int dotdots = count_substrings(path, "..");
+  int depth = posh_count_substrings(PWD, "/");
+  int dotdots = posh_count_substrings(path, "..");
   
   // Edge Case: More ".." in path than "/" in PWD
   // AND
@@ -89,7 +88,7 @@ void posh_cd(char *path) {
       setenv("PWD", "/", 1);
     }
     else {
-      printf("-posh: cd: %s: No such file or directory\n", path);
+      perror("posh: cd");
     }
     return;
   }
@@ -98,28 +97,27 @@ void posh_cd(char *path) {
   if (path[0] == '/') {
 
     // Edge Case: "cd /../smth"
+    
     if (path[1] == '.' && path[2] == '.') {
-
       if(!chdir("/")) {
 	setenv("PWD", "/", 1);
       }
       else {
-	printf("-posh: cd: %s: No such file or directory\n", path);
+        perror("posh: cd");
       }
-      return;
-      
+      return;  
     }
-
+    
     if (!chdir(path)) {
 
       // Remove .. before assigning path to PWD Variable
       while (strstr(path, ".."))
-	remove_dotdot(path);
+	posh_remove_dotdot(path);
       setenv("PWD", path, 1);
 
     }
     else {
-      printf("-posh: cd: %s: No such file or directory\n", path);
+      perror("posh: cd");
     }
     return;
 
@@ -150,34 +148,19 @@ void posh_cd(char *path) {
 	i++;
       }
 
+      // chdir and set PWD
+      if (!chdir(newAbsPath)) {
 
-      // check if new_abs_path even exists
-      DIR *dir = opendir(newAbsPath);
-      if (dir) {
+	// Remove every "/smth/.." before assigning the path to PWD Variable
+	while (strstr(newAbsPath, ".."))
+	  posh_remove_dotdot(newAbsPath);
+	setenv("PWD", newAbsPath, 1);
 
-	closedir(dir);
-
-	// chdir and set PWD
-	if (!chdir(newAbsPath)) {
-
-	  // Remove every "/smth/.." before assigning the path to PWD Variable
-	  while (strstr(newAbsPath, ".."))
-	    remove_dotdot(newAbsPath);
-	  setenv("PWD", newAbsPath, 1);
-
-	}
-	else {
-	  printf("chdir failure!\n");
-	}
-
-      }
-      else if (ENOENT == errno) {
-	printf("-posh: cd: %s: No such file or directory\n", path);
       }
       else {
-	printf("opendir failure!\n");
+        perror("posh: cd");
       }
-    
+      
     }
     
    free(newAbsPath);

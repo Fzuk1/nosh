@@ -3,15 +3,16 @@
  * - https://www.ibm.com/docs/en/aix/7.2.0?topic=administration-operating-system-shells
  * - https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html
  * - https://sekrit.de/webdocs/c/beginners-guide-away-from-scanf.html
+ * - https://brennan.io/2015/01/16/write-a-shell-in-c/
  *
  * Currently working on:
  * - builtin.c
  *
  * TODOS:
- * - (FIXED line: 75) When cmd == "" strsplit assertion failes
+ * - Write better code like here: "https://brennan.io/2015/01/16/write-a-shell-in-c/"
+ * - Maybe "cd.c", "clear.c", "echo.c", ... better than just "builtin.c"
  * - Add malloc error checking
- * - Cant open posh in posh due to signal 11:
- *   Line 142: printf("killed by signal %d\n", WTERMSIG(wstatus));
+ * -
  */
 
 
@@ -20,211 +21,180 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
-#include <sys/types.h>
-#include <dirent.h> 
 #include <unistd.h> 
 #include <sys/wait.h>
 
 #include "Builtin.h"
 
 
-#define MAX_CMD_SIZE 100
+#define MAX_LINE_SIZE 1024
 
 
-void handle_input(char *cmd, char **pathTokens);
-char *find_cmd(char *cmd, char **pathTokens);
-void exec_cmd(char **cmdTokens, char *path);
-char **str_split(char *aStr, const char aDelim);
+void posh_shell_loop();
+char *posh_read_line();
+char **posh_str_split(char *aStr, const char aDelim);
+int posh_execute_cmd(char **args);
+
+//char *posh_find_cmd(char *cmd, char **pathTokens);
 
 /*------------------------------------------------------------------------------------------*/
 
 int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 
-  //pwd Env Variable
-  //const char *PWD = getenv("PWD");
-  //printf("%s\n%s\n", PATH, PWD);
+  // Load config files, like cmd history
 
-  const char *PATH = getenv("PATH");
+  posh_shell_loop();
+
+  // Cleanup
   
-  char *path = strdup(PATH);
-  char **pathTokens = str_split(path, ':');
-  free(path);
-
-  
-  char *cmd = malloc(MAX_CMD_SIZE * sizeof(char));
-
-  if (cmd) {
-    bool running = true;
-    while (running) {
-
-      free(cmd);
-      cmd = malloc(MAX_CMD_SIZE * sizeof(char));
-      if (cmd) {
-	printf("$ ");
-    
-	// Don't use scanf because it comes with a lot of error possibilities
-	// Commands longer than MAX_CMD_SIZE are not read by fgets
-	if (fgets(cmd, MAX_CMD_SIZE, stdin)) {
-	  if (!strchr(cmd, '\n')) {
-	    int tmp;
-	    // Get rid of the rest of the line
-	    while ((tmp = getchar()) != '\n' && tmp != EOF) {
-	      ;
-	    }
-	    printf("Command too long!\n");
-	    continue;
-	  }
-	  if (cmd[0] == '\n' && cmd[1] == '\0') {
-	    continue;
-	  }
-	  
-	  cmd[strcspn(cmd, "\n")] = 0;
-	  if (strcmp(cmd, "exit") == 0) {
-	    running = false;
-	    break;
-	  }
-	  handle_input(cmd, pathTokens);
-	  
-	}
-      }
-    }
-  }
-  
-  // Free Malloced Memory of the paths
-  if (pathTokens) {
-    int i;
-    for (i = 0; *(pathTokens + i); i++) {
-      // printf("Path %d: %s\n", i, *(path_tokens + i));
-      free(*(pathTokens + i));
-    }
-    free(pathTokens);
-  }
-
-  
-  free(cmd);
-
-
   return 0;
 }
 
 /*------------------------------------------------------------------------------------------*/
 
-void handle_input(char *cmd, char **pathTokens) {
+void posh_shell_loop() {
+  
+  char *line;
+  char **args;
+  int status;
+    
+  do {
+    printf("# ");
+    
+    line = posh_read_line();
+    args = posh_str_split(line, ' ');
+    status = posh_execute_cmd(args);
 
-  char **cmdTokens = str_split(cmd, ' ');
-  // Search for "cmd" in the paths and pass cmd_tokens and the valid path to execcmd
-
-
-  if (strcmp(cmd, "cd") == 0) {
-    posh_cd(cmdTokens[1]);
-  }
-  else if (strcmp(cmd, "echo") == 0) {
-    posh_echo();
-  }
-  else if (strcmp(cmd, "help") == 0) {
-    posh_help();
-  }
-  else if (strcmp(cmd, "pwd") == 0) {
-    posh_pwd();
-  }
-  else if (strcmp(cmd, "clear") == 0) {
-
-    // Set the EnvVar to the same value as Bash
-    setenv("TERM", "xterm-256color", 1);
-    posh_clear();
-
-  }
-  else if (cmd[0] == '.' && cmd[1] == '/') {
-    printf("File execution \"./\" is not implemeted yet\n");
-  }
-  else {
-
-    char *path = NULL;
-    path = find_cmd(cmd, pathTokens);
-    if (path)
-      exec_cmd(cmdTokens, path);
-
-  }
-
-  // Free malloced memory of the cmd_tokens
-  if (cmdTokens) {
-
-    int i;
-    for (i = 0; *(cmdTokens + i); i++) {
-      free(*(cmdTokens + i));
-    }
-    free(cmdTokens);
-
-  }
-
+    free(line);
+    for (int i = 0; *(args + i); i++)
+      free(*(args + i));
+    free(args);
+  } while (!status);
+  
 }
 
 /*------------------------------------------------------------------------------------------*/
 
-void exec_cmd(char **cmdTokens, char *path) {
-  // Add the command to the path
-  char *program = malloc(sizeof(char) * (strlen(path) + strlen(cmdTokens[0]) + 1));
+char *posh_read_line() {
+  int bufsize = MAX_LINE_SIZE;
+  int position = 0;
+  char *buffer = malloc(sizeof(char) * MAX_LINE_SIZE);
+  int c;
 
-  program[0] = '\0';
-  
-  int wstatus;
-  pid_t cpid, w;
-
-  cpid = fork();
-  if (cpid == -1) {
-    perror("fork");
+  if (!buffer) {
+    fprintf(stderr, "posh: malloc error\n");
     exit(EXIT_FAILURE);
   }
 
-  if (cpid == 0) {
+  while (true) {
+    // Read next char
+    c = getchar();
 
-    strcat(program, path);
-    strcat(program, "/");
-    strcat(program, cmdTokens[0]);
-    // printf("Program: %s\n", program);
+    // Check for EOF or \n
+    if (c == EOF || c == '\n') {
+      buffer[position] = '\0';
+      return buffer;
+    }
+    else {
+      buffer[position] = c;
+    }
+    position++;
 
-    execve(program, cmdTokens, NULL);
-
-    perror("execve");  // Print an error message if execve fails
-    exit(EXIT_FAILURE);
-
-  }
-  else {
-
-    do {
-      w = waitpid(cpid, &wstatus, WUNTRACED | WCONTINUED);
-      if (w == -1) {
-	perror("waitpid");
+    // If bufsize is too small
+    if (position >= bufsize) {
+      bufsize += MAX_LINE_SIZE;
+      buffer = realloc(buffer, bufsize);
+      if (!buffer) {
+	fprintf(stderr, "posh: realloc error\n");
 	exit(EXIT_FAILURE);
       }
-      if (WIFEXITED(wstatus)) {
-	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
-	free(program);
-	return;
-      }
-      else if (WIFSIGNALED(wstatus)) {
-	printf("killed by signal %d\n", WTERMSIG(wstatus));
-      }
-      else if (WIFSTOPPED(wstatus)) {
-	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
-      }
-      else if (WIFCONTINUED(wstatus)) {
-	printf("continued\n");
-      }
-    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-    
-    free(program);
-    exit(EXIT_SUCCESS);
-
+    }
   }
-
-
-  return;
 }
 
 /*------------------------------------------------------------------------------------------*/
 
-char *find_cmd(char *cmd, char **pathTokens) {
+int posh_execute_cmd(char **args) {
+
+  // Check if command matches builtin commands
+  if (strcmp(args[0], "cd") == 0) {
+    posh_cd(args[1]);
+  }
+  else if (strcmp(args[0], "exit") == 0) {
+    // Exit the do-while-loop by returning a non 0 value 
+    return 1;
+  }
+  else if (strcmp(args[0], "echo") == 0) {
+    posh_echo();
+  }
+  else if (strcmp(args[0], "help") == 0) {
+    posh_help();
+  }
+  else if (strcmp(args[0], "pwd") == 0) {
+    posh_pwd();
+  }
+  else if (strcmp(args[0], "clear") == 0) {
+    // Set the EnvVar to the same value as Bash
+    // setenv("TERM", "xterm-256color", 1);
+    posh_clear();
+  }
+  else if (args[0][0] == '.' && args[0][1] == '/') {
+    printf("File execution \"./\" is not implemeted yet\n");
+  }
+  
+  else {
+    // Create a child process to execute a non builtin command
+    int wstatus;
+    pid_t cpid, w;
+
+    cpid = fork();
+    if (cpid == -1) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    }
+
+    if (cpid == 0) {
+      // Child executes command
+      if (execvp(args[0], args) == -1) {
+	// Print an error message if execve fails
+	perror("posh");
+      }
+      exit(EXIT_FAILURE);
+
+    }
+    else {
+      // Parent waits for child
+      do {
+	w = waitpid(cpid, &wstatus, WUNTRACED);
+	if (w == -1) {
+	  perror("waitpid");
+	  exit(EXIT_FAILURE);
+	}
+	if (WIFEXITED(wstatus)) {
+	  // printf("exited, status=%d\n", WEXITSTATUS(wstatus));
+	  return 0;
+	}
+	else if (WIFSIGNALED(wstatus)) {
+	  printf("killed by signal %d\n", WTERMSIG(wstatus));
+	}
+	else if (WIFSTOPPED(wstatus)) {
+	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+	}
+	else if (WIFCONTINUED(wstatus)) {
+	  printf("continued\n");
+	}
+      } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    
+      return 1;
+
+    }
+  }
+  return 0;
+}
+
+/*------------------------------------------------------------------------------------------
+
+char *posh_find_cmd(char *cmd, char **pathTokens) {
  
   DIR *currDir;
   int i = 0;
@@ -261,12 +231,13 @@ char *find_cmd(char *cmd, char **pathTokens) {
   
   return retPath;
 }
+*/
 
 /*------------------------------------------------------------------------------------------*/
 /*                                       DONE                                               */
 /*------------------------------------------------------------------------------------------*/
 
-char **str_split(char *aStr, const char aDelim) {
+char **posh_str_split(char *aStr, const char aDelim) {
 
   char** result = 0;
   size_t count = 0;
