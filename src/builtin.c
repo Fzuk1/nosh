@@ -1,13 +1,14 @@
 /*
  * Currently working on:
- * - cd, relative paths
+ * - cd, edge cases
  *
  * TODOS:
- * - Write the shell builtin commands (cd, echo, exit(J), help, pwd(J), ...)
+ * - Write the shell builtin commands (cd, echo, exit(J), help, pwd(J), exec, ...)
  * - Add malloc error checking
  * - Piping (stdout to stdin)
  * - Command history with <Arrow-Up> and <Arrow-Down>
  * - TAB Completion
+ * - In command navigation with <Arrow-Left> and <Arrow-right>
  * - ... (TBD)
  */
 
@@ -20,7 +21,7 @@
 
 #include "Builtin.h"
 
-int posh_count_substrings(const char *str, const char *sub) {
+int nosh_count_substrings(const char *str, const char *sub) {
     int count = 0;
     size_t subLen = strlen(sub);
 
@@ -36,14 +37,14 @@ int posh_count_substrings(const char *str, const char *sub) {
     return count;
 }
 
-void posh_remove_substring(char *str, int start, int end) {
+void nosh_remove_substring(char *str, int start, int end) {
 
   assert(end > start);
   memmove(str + start, str + end + 1, strlen(str) - end + 1);
   
 }
 
-void posh_remove_dotdot(char *str) {
+void nosh_remove_dotdot(char *str) {
   // Search for ".." in path and remove it plus previous directory
   char *position = NULL;
   position = strstr(str, "..");
@@ -58,14 +59,14 @@ void posh_remove_dotdot(char *str) {
 
     // Remove "/smth/.."
     if (start >= 0)
-      posh_remove_substring(str, start, dotIndex + 1);
+      nosh_remove_substring(str, start, dotIndex + 1);
 
     if (strlen(str) == 0)
       str[0] = '/';
   }
 }
 
-void posh_cd(char *path) {
+void nosh_cd(char *path) {
 
   // TODO Open Edge Case where PWD: "/", and cmd: "cd home/../home/uisfzuk/..", where there are
   // more ".." in path than in PWD, but not more than in path itself.
@@ -77,8 +78,8 @@ void posh_cd(char *path) {
 
   // Check if there are more ".." than pwd is directories deep
   const char *PWD = getenv("PWD");
-  int depth = posh_count_substrings(PWD, "/");
-  int dotdots = posh_count_substrings(path, "..");
+  int depth = nosh_count_substrings(PWD, "/");
+  int dotdots = nosh_count_substrings(path, "..");
   
   // Edge Case: More ".." in path than "/" in PWD
   // AND
@@ -88,7 +89,7 @@ void posh_cd(char *path) {
       setenv("PWD", "/", 1);
     }
     else {
-      perror("posh: cd");
+      perror("nosh: cd");
     }
     return;
   }
@@ -103,21 +104,21 @@ void posh_cd(char *path) {
 	setenv("PWD", "/", 1);
       }
       else {
-        perror("posh: cd");
+        perror("nosh: cd");
       }
-      return;  
+      return;
     }
     
     if (!chdir(path)) {
 
       // Remove .. before assigning path to PWD Variable
       while (strstr(path, ".."))
-	posh_remove_dotdot(path);
+	nosh_remove_dotdot(path);
       setenv("PWD", path, 1);
 
     }
     else {
-      perror("posh: cd");
+      perror("nosh: cd");
     }
     return;
 
@@ -153,12 +154,12 @@ void posh_cd(char *path) {
 
 	// Remove every "/smth/.." before assigning the path to PWD Variable
 	while (strstr(newAbsPath, ".."))
-	  posh_remove_dotdot(newAbsPath);
+	  nosh_remove_dotdot(newAbsPath);
 	setenv("PWD", newAbsPath, 1);
 
       }
       else {
-        perror("posh: cd");
+        perror("nosh: cd");
       }
       
     }
@@ -171,24 +172,52 @@ void posh_cd(char *path) {
 }
 
 
-void posh_echo() {
+void nosh_echo(char **args) {
+  // UNIMPLEMENTED;
+  nosh_remove_arg0(args);
+  if (args[0][0] == '$') {
+    for (int i = 0; i < (int)strlen(args[0]); i++) {
+      args[0][i] = args[0][i + 1];
+    }
+    // printf("%s\n", args[0]);
+    char *envVar = getenv(args[0]);
+    if (envVar)
+      printf("%s\n", envVar);
+  }
+  else {
+    for (int i = 0; args[i]; i++) {
+      printf("%s ", args[i]);
+    }
+    printf("\n");
+  }
+}
+
+
+void nosh_help() {
   UNIMPLEMENTED;
 }
 
 
-void posh_help() {
-  UNIMPLEMENTED;
-}
-
-
-void posh_pwd() {
+void nosh_pwd() {
   const char *PWD = getenv("PWD");
   printf("%s\n", PWD);
 }
 
 
-void posh_clear() {
+void nosh_clear() {
   // TODO Next feature to implement
   UNIMPLEMENTED;
 }
 
+
+void nosh_remove_arg0(char **args) {
+  for (int i = 0; args[i]; i++) {
+    args[i] = args[i + 1];
+  }
+}
+
+void nosh_exec(char **args) {
+  nosh_remove_arg0(args);
+  if (execvp(args[0], args) == -1)
+    perror("nosh: exec");
+}

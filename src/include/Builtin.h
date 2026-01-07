@@ -10,13 +10,15 @@
   } while(0)
 
 
-int posh_count_substrings(const char *str, const char *sub);
-void posh_remove_dotdot(char *str);
-void posh_remove_substring(char *str, int start, int end);
-void posh_cd(char *path);
-void posh_echo();
-void posh_help();
-void posh_pwd();
-void posh_clear();
+int nosh_count_substrings(const char *str, const char *sub);
+void nosh_remove_dotdot(char *str);
+void nosh_remove_substring(char *str, int start, int end);
+void nosh_cd(char *path);
+void nosh_echo(char **args);
+void nosh_help();
+void nosh_pwd();
+void nosh_clear();
+void nosh_remove_arg0(char **args);
+void nosh_exec(char **args);
 
 #endif
