@@ -9,7 +9,6 @@
  * - builtin.c
  *
  * TODOS:
- * - HAVE TO RENAME!!! (posh already exists as a shell)
  * - Write better code like here: "https://brennan.io/2015/01/16/write-a-shell-in-c/"
  * - Maybe "cd.c", "clear.c", "echo.c", ... better than just "builtin.c"
  * - Add malloc error checking
