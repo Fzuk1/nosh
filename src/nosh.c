@@ -12,7 +12,7 @@
  * - Hook up some package manager (apt?, pacman?, ...?)
  * - Write better code like here: "https://brennan.io/2015/01/16/write-a-shell-in-c/"
  * - Add malloc error checking
- * -
+ * - 
  */
 
 
