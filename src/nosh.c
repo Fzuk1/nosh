@@ -9,8 +9,8 @@
  * - builtin.c
  *
  * TODOS:
+ * - Hook up some package manager (apt?, pacman?, ...?)
  * - Write better code like here: "https://brennan.io/2015/01/16/write-a-shell-in-c/"
- * - Maybe "cd.c", "clear.c", "echo.c", ... better than just "builtin.c"
  * - Add malloc error checking
  * -
  */
@@ -135,6 +135,10 @@ int nosh_execute_cmd(char **args) {
 
   // Check if command matches builtin commands
   if (strcmp(args[0], "cd") == 0) {
+    if (!args[1] || args[2]) {
+      printf("Usage: cd [dir]\n");
+      return 0;
+    }
     nosh_cd(args[1]);
   }
   else if (strcmp(args[0], "exit") == 0) {
@@ -142,20 +146,40 @@ int nosh_execute_cmd(char **args) {
     return 1;
   }
   else if (strcmp(args[0], "echo") == 0) {
+    if (!args[1]) {
+      printf("Usage: echo [text or $ENVVAR]\n");
+      return 0;
+    }
     nosh_echo(args);
   }
   else if (strcmp(args[0], "help") == 0) {
+    if (args[1]) {
+      printf("Usage: help\n");
+      return 0;
+    }
     nosh_help();
   }
   else if (strcmp(args[0], "pwd") == 0) {
+    if (args[1]) {
+      printf("Usage: pwd\n");
+      return 0;
+    }
     nosh_pwd();
   }
   else if (strcmp(args[0], "clear") == 0) {
     // Set the EnvVar to the same value as Bash
     // setenv("TERM", "xterm-256color", 1);
+    if (args[1]) {
+      printf("Usage: clear\n");
+      return 0;
+    }
     nosh_clear();
   }
   else if (strcmp(args[0], "exec") == 0) {
+    if (!args[1]) {
+      printf("Usage: exec [program]\n");
+      return 0;
+    }
     nosh_exec(args);
   }
   else if (args[0][0] == '.' && args[0][1] == '/') {
@@ -176,7 +200,8 @@ int nosh_execute_cmd(char **args) {
       // Child executes command
       if (execvp(args[0], args) == -1) {
 	// Print an error message if execvp fails
-	perror("nosh: execvp");
+	// perror("nosh: execvp");
+	printf("Command '%s' not found, but may be installable\n", args[0]);
       }
       exit(EXIT_FAILURE);
 
