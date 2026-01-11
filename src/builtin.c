@@ -3,8 +3,8 @@
  * - echo or clear, gotta decide
  *
  * TODOS:
- * - Write the shell builtin commands (cd(J), echo, exit(J), help(J), pwd(J), exec(J), clear, ...)
- * - 
+ * - Write the shell builtin commands (cd(J), echo, exit(J), help(J), pwd(J), exec(J), clear(J), ...)
+ * - Add malloc error checking
  * - Piping (stdout to stdin)
  * - Command history with <Arrow-Up> and <Arrow-Down>
  * - TAB Completion
@@ -127,7 +127,7 @@ void nosh_pwd() {
 
 
 void nosh_clear() {
-  // TODO: Next feature to implement
+  // TODO: Maybe make it better.
   // UNIMPLEMENTED;
 
   // \033[3J → clear scrollback buffer (not POSIX, but widely supported)

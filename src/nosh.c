@@ -145,6 +145,9 @@ char *nosh_read_line() {
 void nosh_search_split_quotes(char **args) {
   /* TODO: For commands like 'git commit -m "msg with spaces"', 
            I need to make everything between "" or () into one arg
+     NOT DONE YET!
+     Cant do arg2: "..." arg3: ... arg4: ...
+     arg3 and arg4 would be ignored since split arg2 gets NULL terminated
   */
 
   char *first_quote = NULL;
@@ -206,63 +209,92 @@ void nosh_search_split_quotes(char **args) {
 
 int nosh_execute_cmd(char **args) {
 
-  // Check if command matches builtin commands  
-  if (strcmp(args[0], "cd") == 0) {
+  const char *builtins[] = {
+    "cd",
+    "echo",
+    "help",
+    "pwd",
+    "clear",
+    "exec",
+    "exit",
+    NULL
+  };
+
+  if (args[0][0] == '.' && args[0][1] == '/') {
+    nosh_dot_slash(args);
+    return 0;
+  }
+  
+  int i;
+  for (i = 0; builtins[i]; i++) {
+    if (strcmp(args[0], builtins[i]) == 0)
+      break;
+  }
+  
+  switch(i) {
+  case 0: {
     if (!args[1] || args[2]) {
       printf("Usage: cd [dir]\n");
       return 0;
     }
     nosh_cd(args[1]);
+    break;
   }
-  else if (strcmp(args[0], "exit") == 0) {
-    // Exit the do-while-loop by returning a non 0 value 
-    return 1;
-  }
-  else if (strcmp(args[0], "echo") == 0) {
+  case 1: {
     if (!args[1]) {
       printf("Usage: echo [text or $ENVVAR]\n");
       return 0;
     }
     nosh_echo(args);
+    break;
   }
-  else if (strcmp(args[0], "help") == 0) {
+  case 2: {
     if (args[1]) {
       printf("Usage: help\n");
       return 0;
     }
     nosh_help();
+    break;
   }
-  else if (strcmp(args[0], "pwd") == 0) {
+  case 3: {
     if (args[1]) {
       printf("Usage: pwd\n");
       return 0;
     }
     nosh_pwd();
+    break;
   }
-  else if (strcmp(args[0], "clear") == 0) {
-    // Set the EnvVar to the same value as Bash
-    // setenv("TERM", "xterm-256color", 1);
+  case 4: {
     if (args[1]) {
       printf("Usage: clear\n");
       return 0;
     }
     nosh_clear();
+    break;
   }
-  else if (strcmp(args[0], "exec") == 0) {
-    if (!args[1]) {
+  case 5: {
+   if (!args[1]) {
       printf("Usage: exec [program]\n");
       return 0;
     }
-    nosh_exec(args);
+    nosh_exec(args); 
+    break;
   }
-  else if (args[0][0] == '.' && args[0][1] == '/') {
-    // printf("File execution \"./\" is not implemeted yet\n");
-    nosh_dot_slash(args);
+  case 6: {
+    if (args[1]) {
+      printf("Usage: exit\n");
+      return 0;
+    }
+    return 1;
+    break;
   }
-  else {
+  default: {
     nosh_launch_cmd(args);
+    break;
   }
-  return 0;
+  }
+
+  return 0;  
 }
 
 /*------------------------------------------------------------------------------------------*/
