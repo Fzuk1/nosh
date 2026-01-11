@@ -128,7 +128,14 @@ void nosh_pwd() {
 
 void nosh_clear() {
   // TODO: Next feature to implement
-  UNIMPLEMENTED;
+  // UNIMPLEMENTED;
+
+  // \033[3J → clear scrollback buffer (not POSIX, but widely supported)
+  printf("\033[3J\033[2J\033[H");
+  fflush(stdout);
+  // Twice to also get last scrollback buffer
+  printf("\033[3J\033[2J\033[H");
+  fflush(stdout);
 }
 
 

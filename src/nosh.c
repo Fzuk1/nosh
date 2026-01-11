@@ -34,7 +34,7 @@
 void nosh_shell_loop();
 char *nosh_read_line();
 char **nosh_str_split(char *aStr, const char aDelim);
-void nosh_search_split_args(char **args);
+void nosh_search_split_quotes(char **args);
 int nosh_execute_cmd(char **args);
 int nosh_launch_cmd(char **args);
 
@@ -89,7 +89,7 @@ void nosh_shell_loop() {
     
     args = nosh_str_split(line, ' ');
     // Search for split up args of type ["Hello,] [World"] or [(1] [+] [2)]
-    nosh_search_split_args(args);
+    nosh_search_split_quotes(args);
     status = nosh_execute_cmd(args);
 
     // Free all mallocs of current loop
@@ -142,7 +142,7 @@ char *nosh_read_line() {
 
 /*------------------------------------------------------------------------------------------*/
 
-void nosh_search_split_args(char **args) {
+void nosh_search_split_quotes(char **args) {
   /* TODO: For commands like 'git commit -m "msg with spaces"', 
            I need to make everything between "" or () into one arg
   */
@@ -151,11 +151,10 @@ void nosh_search_split_args(char **args) {
   char *second_quote = NULL;
   
   // do {
-    // Find out where quotes are
+    // Find out where first quote is
     int i, j;
     int done = false;
     first_quote = NULL;
-  
     for (i = 0; args[i] && !done; i++) {
       for (j = 0; j < (int) strlen(args[i]); j++) {
 	if (args[i][j] == '"') {
@@ -167,13 +166,12 @@ void nosh_search_split_args(char **args) {
       }
     }
 
-    // printf("First Quote: arg[%d][%d] at: %p\n", i, j, first_quote);
 
+    // Find out where second quote is
     int k = i;
     int l = j;
     second_quote = NULL;
     done = false;
-  
     for (k = i; args[k] && !done; k++) {
       for (l = j + 1; l < (int) strlen(args[k]); l++) {
 	if (args[k][l] == '"') {
@@ -185,17 +183,16 @@ void nosh_search_split_args(char **args) {
       }
     }
 
-    // printf("Second Quote: arg[%d][%d] at: %p\n", k, l, second_quote);
-
+    
+    // Move quoted args into one arg
     if (first_quote && second_quote) {
-      // Move quoted args into one arg
       for (int m = i+1; m <= k; m++) {
 	strcat(args[i], " ");
 	strcat(args[i], args[m]);
-	args[m] = NULL;
+	args[m] = NULL; // TODO: Remove this! Cant do args after quotes right now
       }
       /*
-      // TODO: Clean up remainders
+      // TODO: Clean up remainders, find out how many times the outer loop has to run
       for (int n = i; k-n >= 0; n++)
 	for (int m = i; k-m >= 0; m++) {
 	  args[m+1] = args[m+2];
@@ -209,7 +206,7 @@ void nosh_search_split_args(char **args) {
 
 int nosh_execute_cmd(char **args) {
 
-  // Check if command matches builtin commands
+  // Check if command matches builtin commands  
   if (strcmp(args[0], "cd") == 0) {
     if (!args[1] || args[2]) {
       printf("Usage: cd [dir]\n");
