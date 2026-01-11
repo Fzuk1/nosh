@@ -10,9 +10,7 @@
   } while(0)
 
 
-int nosh_count_substrings(const char *str, const char *sub);
-void nosh_remove_dotdot(char *str);
-void nosh_remove_substring(char *str, int start, int end);
+void nosh_set_pwd();
 void nosh_cd(char *path);
 void nosh_echo(char **args);
 void nosh_help();

@@ -34,9 +34,8 @@
 void nosh_shell_loop();
 char *nosh_read_line();
 char **nosh_str_split(char *aStr, const char aDelim);
+void nosh_search_split_args(char **args);
 int nosh_execute_cmd(char **args);
-
-//char *nosh_find_cmd(char *cmd, char **pathTokens);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -77,9 +76,16 @@ void nosh_shell_loop() {
     
   do {
     printf("# ");
-    
+
     line = nosh_read_line();
+    // Check for enter press
+    if (strlen(line) == 0) {
+      free(line);
+      continue;
+    }
     args = nosh_str_split(line, ' ');
+    // Search for split up args of type ["Hello,] [World"] or [(1] [+] [2)]
+    nosh_search_split_args(args);
     status = nosh_execute_cmd(args);
 
     free(line);
@@ -99,7 +105,7 @@ char *nosh_read_line() {
   int c;
 
   if (!buffer) {
-    fprintf(stderr, "nosh: malloc error\n");
+    perror("nosh: malloc");
     exit(EXIT_FAILURE);
   }
 
@@ -127,6 +133,14 @@ char *nosh_read_line() {
       }
     }
   }
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void nosh_search_split_args(char **/*args*/) {
+  /* TODO: For commands like 'git commit -m "msg with spaces"', 
+           I need to make everything between "" or () into one arg
+  */
 }
 
 /*------------------------------------------------------------------------------------------*/
@@ -236,47 +250,6 @@ int nosh_execute_cmd(char **args) {
   return 0;
 }
 
-/*------------------------------------------------------------------------------------------
-
-char *nosh_find_cmd(char *cmd, char **pathTokens) {
- 
-  DIR *currDir;
-  int i = 0;
-  bool done = false;
-  char *retPath = NULL;
-  
-  while (pathTokens[i] != NULL && !done) {
-    // printf("Path %d: %s\n", i, *(path_tokens + i));
-    currDir = opendir(pathTokens[i]);
-    if (currDir) {
-
-      // printf("Opened: %s\n", path_tokens[i]);
-      struct dirent *direntry;
-      while ((direntry = readdir(currDir))) {
-
-	if (strcmp(cmd, direntry->d_name) == 0) {
-
-	  retPath = pathTokens[i];
-	  done = true;
-	  break;
-
-	}
-
-      }
-      closedir(currDir);
-
-    }
-    i++;
-  }
-  
-  if (!done)
-    printf("-nosh: %s: Command not found!\n", cmd);
-  
-  
-  return retPath;
-}
-*/
-
 /*------------------------------------------------------------------------------------------*/
 /*                                       DONE                                               */
 /*------------------------------------------------------------------------------------------*/
@@ -286,7 +259,7 @@ char **nosh_str_split(char *aStr, const char aDelim) {
   char** result = 0;
   size_t count = 0;
   char* tmp = aStr;
-  char* lastSpc = 0;
+  char* lastDelim = 0;
   char delim[2];
   delim[0] = aDelim;
   delim[1] = 0;
@@ -296,14 +269,14 @@ char **nosh_str_split(char *aStr, const char aDelim) {
 
     if (aDelim == *tmp) {
       count++;
-      lastSpc = tmp;
+      lastDelim = tmp;
     }
     tmp++;
 
   }
 
   /* Add space for trailing token. */
-  count += lastSpc < (aStr + strlen(aStr) - 1);
+  count += lastDelim < (aStr + strlen(aStr) - 1);
 
   /* Add space for terminating null string so caller
      knows where the list of returned strings ends. */
@@ -311,23 +284,24 @@ char **nosh_str_split(char *aStr, const char aDelim) {
 
   result = malloc(sizeof(char*) * count);
 
-  if (result) {
+  if (!result) {
+    perror("nosh: malloc");
+    exit(EXIT_FAILURE);
+  }
 
-    size_t idx  = 0;
-    char* token = strtok(aStr, delim);
+  size_t idx  = 0;
+  char* token = strtok(aStr, delim);
 
-    while (token) {
+  while (token) {
 
-      assert(idx < count);
-      *(result + idx++) = strdup(token);
-      token = strtok(NULL, delim);
-
-    }
-
-    assert(idx == count - 1);
-    *(result + idx) = NULL;
+    assert(idx < count);
+    *(result + idx++) = strdup(token);
+    token = strtok(NULL, delim);
 
   }
+
+  assert(idx == count - 1);
+  *(result + idx) = NULL;
 
   return result;
   

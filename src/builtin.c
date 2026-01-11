@@ -1,10 +1,10 @@
 /*
  * Currently working on:
- * - cd, edge cases
+ * - echo or clear, gotta decide
  *
  * TODOS:
- * - Write the shell builtin commands (cd, echo, exit(J), help, pwd(J), exec, ...)
- * - Add malloc error checking
+ * - Write the shell builtin commands (cd(J), echo, exit(J), help(J), pwd(J), exec(J), clear, ...)
+ * - 
  * - Piping (stdout to stdin)
  * - Command history with <Arrow-Up> and <Arrow-Down>
  * - TAB Completion
@@ -21,168 +21,80 @@
 
 #include "Builtin.h"
 
-int nosh_count_substrings(const char *str, const char *sub) {
-    int count = 0;
-    size_t subLen = strlen(sub);
 
-    if (subLen == 0)
-        return 0;
+#define MAX_PATH_SIZE 512
 
-    const char *p = str;
-    while ((p = strstr(p, sub)) != NULL) {
-        count++;
-        p += subLen;
-    }
 
-    return count;
-}
-
-void nosh_remove_substring(char *str, int start, int end) {
-
-  assert(end > start);
-  memmove(str + start, str + end + 1, strlen(str) - end + 1);
-  
-}
-
-void nosh_remove_dotdot(char *str) {
-  // Search for ".." in path and remove it plus previous directory
-  char *position = NULL;
-  position = strstr(str, "..");
-  if (position) {
-    
-    int dotIndex = position - str;
-    
-    // Find previous '/'
-    int start = dotIndex - 2;
-    while (start >= 0 && str[start] != '/')
-      start--;
-
-    // Remove "/smth/.."
-    if (start >= 0)
-      nosh_remove_substring(str, start, dotIndex + 1);
-
-    if (strlen(str) == 0)
-      str[0] = '/';
+void nosh_set_pwd() {
+  char *cwd = malloc(sizeof(char) * MAX_PATH_SIZE);
+  if (!cwd) {
+    perror("nosh: malloc");
+    exit(EXIT_FAILURE);
   }
+
+  // TODO: MAX_PATH_SIZE may not be enough, then what?
+  getcwd(cwd, MAX_PATH_SIZE);
+
+  setenv("PWD", cwd, 1);
+  free(cwd);
 }
 
 void nosh_cd(char *path) {
+  // Make ~ = $HOME
+  if (path[0] == '~') {
+    char *changed_path = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(path) + 2));
+    if (!changed_path) {
+      perror("nosh: malloc");
+      exit(EXIT_FAILURE);
+    }
 
-  // TODO Open Edge Case where PWD: "/", and cmd: "cd home/../home/uisfzuk/..", where there are
-  // more ".." in path than in PWD, but not more than in path itself.
-  // Might need: int slashes_in_path = countsubstrings(path, "/");
-  
-  // Edge Case: "cd ." or "cd ./"
-  if (strcmp(path, ".") == 0 || strcmp(path, "./") == 0)
-    return;
+    // Write the path from $HOME to changed_paths memory address
+    char *home_path = getenv("HOME");
+    for (int i = 0; home_path[i]; i++) {
+      changed_path[i] = home_path[i];
+    }
 
-  // Check if there are more ".." than pwd is directories deep
-  const char *PWD = getenv("PWD");
-  int depth = nosh_count_substrings(PWD, "/");
-  int dotdots = nosh_count_substrings(path, "..");
-  
-  // Edge Case: More ".." in path than "/" in PWD
-  // AND
-  // Edge Case: PWD: "/" -> "cd .."
-  if (dotdots > depth || (strcmp(PWD, "/") == 0 && path[0] == '.' && path[1] == '.')) {
-    if(!chdir("/")) {
-      setenv("PWD", "/", 1);
+    // Remove first char (~) from path, to combine $HOME with path
+    for (int i = 0; i < (int)strlen(path); i++) {
+      path[i] = path[i + 1];
+    }
+    strcat(changed_path, path);
+    
+    // Chdir normally
+    if (!chdir(changed_path)) {
+      nosh_set_pwd();
     }
     else {
       perror("nosh: cd");
     }
-    return;
-  }
 
-  
-  if (path[0] == '/') {
-
-    // Edge Case: "cd /../smth"
-    
-    if (path[1] == '.' && path[2] == '.') {
-      if(!chdir("/")) {
-	setenv("PWD", "/", 1);
-      }
-      else {
-        perror("nosh: cd");
-      }
-      return;
-    }
-    
-    if (!chdir(path)) {
-
-      // Remove .. before assigning path to PWD Variable
-      while (strstr(path, ".."))
-	nosh_remove_dotdot(path);
-      setenv("PWD", path, 1);
-
-    }
-    else {
-      perror("nosh: cd");
-    }
-    return;
-
+    free(changed_path);
   }
   else {
-    
-    // Make an absolute path out of PWD/path
-    int PWDLen = strlen(PWD);
-    int pathLen = strlen(path);
-    char *newAbsPath = calloc(PWDLen + pathLen, sizeof(char));
-
-    if (newAbsPath) {
-
-      newAbsPath[0] = '\0';
-      
-      int i;
-      for (i = 0; i < PWDLen; i++) {
-        newAbsPath[i] = PWD[i];
-      }
-      
-      if (strcmp(PWD, "/") != 0) {
-        newAbsPath[i] = '/';
-        i++;
-      }
-      
-      for (int j = 0; j < pathLen; j++) {
-        newAbsPath[i] = path[j];
-	i++;
-      }
-
-      // chdir and set PWD
-      if (!chdir(newAbsPath)) {
-
-	// Remove every "/smth/.." before assigning the path to PWD Variable
-	while (strstr(newAbsPath, ".."))
-	  nosh_remove_dotdot(newAbsPath);
-	setenv("PWD", newAbsPath, 1);
-
-      }
-      else {
-        perror("nosh: cd");
-      }
-      
+    // Just change directory to path
+    if (!chdir(path)) {
+      nosh_set_pwd();
     }
-    
-   free(newAbsPath);
-
+    else {
+      perror("nosh: cd");
+    }
   }
-
-  return;
 }
 
 
 void nosh_echo(char **args) {
-  // UNIMPLEMENTED;
   nosh_remove_arg0(args);
   if (args[0][0] == '$') {
+    // Remove '$' from args[0], to pass it correctly to getenv
     for (int i = 0; i < (int)strlen(args[0]); i++) {
       args[0][i] = args[0][i + 1];
     }
-    // printf("%s\n", args[0]);
     char *envVar = getenv(args[0]);
     if (envVar)
       printf("%s\n", envVar);
+  }
+  else if (args[0][0] == '#') {
+    // TODO: Add math capabilities like #(1 + 2)
   }
   else {
     for (int i = 0; args[i]; i++) {
@@ -194,18 +106,27 @@ void nosh_echo(char **args) {
 
 
 void nosh_help() {
-  UNIMPLEMENTED;
+  printf("Nosh Shell ");
+  printf("Builtin Commands:\n");
+  printf("\tcd [PATH] - Changes directory to PATH.\n");
+  printf("\techo [SMTH] - Prints SMTH to stdout.\n");
+  printf("\thelp - Lists builtin commands.\n");
+  printf("\tpwd - Prints working directory to stdout.\n");
+  printf("\tclear - Clears the screen.\n");
+  printf("\texec [PROG] - Replaces current process with PROG.\n");
+  printf("\texit - Exits the shell.\n");
+  printf("For other commands use their man pages.\n");
 }
 
 
 void nosh_pwd() {
-  const char *PWD = getenv("PWD");
-  printf("%s\n", PWD);
+  char *pwd = getenv("PWD");
+  printf("%s\n", pwd);
 }
 
 
 void nosh_clear() {
-  // TODO Next feature to implement
+  // TODO: Next feature to implement
   UNIMPLEMENTED;
 }
 
