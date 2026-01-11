@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 
 #include "Builtin.h"
 
@@ -40,7 +41,7 @@ void nosh_set_pwd() {
 }
 
 void nosh_cd(char *path) {
-  // Make ~ = $HOME
+  // Make '~' = $HOME
   if (path[0] == '~') {
     char *changed_path = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(path) + 2));
     if (!changed_path) {
@@ -141,4 +142,55 @@ void nosh_exec(char **args) {
   nosh_remove_arg0(args);
   if (execvp(args[0], args) == -1)
     perror("nosh: exec");
+}
+
+
+void nosh_dot_slash(char **args) {
+  
+  // Create a child process to execute a non builtin command
+  int wstatus;
+  pid_t cpid, w;
+
+  cpid = fork();
+  if (cpid == -1) {
+    perror("nosh: fork");
+    exit(EXIT_FAILURE);
+  }
+
+  if (cpid == 0) {
+    // Child executes command
+    if (execv(args[0], args) == -1) {
+      // Print an error message if execv fails
+      perror("nosh: execv");
+      // printf("Command '%s' not found\n", args[0]);
+    }
+    exit(EXIT_FAILURE);
+
+  }
+  else {
+    // Parent waits for child
+    do {
+      w = waitpid(cpid, &wstatus, WUNTRACED);
+      if (w == -1) {
+	perror("nosh: waitpid");
+	exit(EXIT_FAILURE);
+      }
+      if (WIFEXITED(wstatus)) {
+	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
+	return;
+      }
+      else if (WIFSIGNALED(wstatus)) {
+	printf("killed by signal %d\n", WTERMSIG(wstatus));
+      }
+      else if (WIFSTOPPED(wstatus)) {
+	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+      }
+      else if (WIFCONTINUED(wstatus)) {
+	printf("continued\n");
+      }
+    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    
+    return;
+
+  }
 }

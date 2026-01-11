@@ -36,6 +36,7 @@ char *nosh_read_line();
 char **nosh_str_split(char *aStr, const char aDelim);
 void nosh_search_split_args(char **args);
 int nosh_execute_cmd(char **args);
+int nosh_launch_cmd(char **args);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -75,7 +76,9 @@ void nosh_shell_loop() {
   int status;
     
   do {
-    printf("# ");
+    // Print "PATH-#" as the input prompt, to always know where you are
+    char *curr_path = getenv("PWD");
+    printf("%s$ ", curr_path);
 
     line = nosh_read_line();
     // Check for enter press
@@ -83,11 +86,13 @@ void nosh_shell_loop() {
       free(line);
       continue;
     }
+    
     args = nosh_str_split(line, ' ');
     // Search for split up args of type ["Hello,] [World"] or [(1] [+] [2)]
     nosh_search_split_args(args);
     status = nosh_execute_cmd(args);
 
+    // Free all mallocs of current loop
     free(line);
     for (int i = 0; *(args + i); i++)
       free(*(args + i));
@@ -137,10 +142,67 @@ char *nosh_read_line() {
 
 /*------------------------------------------------------------------------------------------*/
 
-void nosh_search_split_args(char **/*args*/) {
+void nosh_search_split_args(char **args) {
   /* TODO: For commands like 'git commit -m "msg with spaces"', 
            I need to make everything between "" or () into one arg
   */
+
+  char *first_quote = NULL;
+  char *second_quote = NULL;
+  
+  // do {
+    // Find out where quotes are
+    int i, j;
+    int done = false;
+    first_quote = NULL;
+  
+    for (i = 0; args[i] && !done; i++) {
+      for (j = 0; j < (int) strlen(args[i]); j++) {
+	if (args[i][j] == '"') {
+	  first_quote = &args[i][j];
+	  done = true;
+	  i--;
+	  break;
+	}
+      }
+    }
+
+    // printf("First Quote: arg[%d][%d] at: %p\n", i, j, first_quote);
+
+    int k = i;
+    int l = j;
+    second_quote = NULL;
+    done = false;
+  
+    for (k = i; args[k] && !done; k++) {
+      for (l = j + 1; l < (int) strlen(args[k]); l++) {
+	if (args[k][l] == '"') {
+	  second_quote = &args[k][l];
+	  done = true;
+	  k--;
+	  break;
+	}
+      }
+    }
+
+    // printf("Second Quote: arg[%d][%d] at: %p\n", k, l, second_quote);
+
+    if (first_quote && second_quote) {
+      // Move quoted args into one arg
+      for (int m = i+1; m <= k; m++) {
+	strcat(args[i], " ");
+	strcat(args[i], args[m]);
+	args[m] = NULL;
+      }
+      /*
+      // TODO: Clean up remainders
+      for (int n = i; k-n >= 0; n++)
+	for (int m = i; k-m >= 0; m++) {
+	  args[m+1] = args[m+2];
+	}
+      */
+    }
+    //} while(first_quote && second_quote);
 }
 
 /*------------------------------------------------------------------------------------------*/
@@ -197,56 +259,66 @@ int nosh_execute_cmd(char **args) {
     nosh_exec(args);
   }
   else if (args[0][0] == '.' && args[0][1] == '/') {
-    printf("File execution \"./\" is not implemeted yet\n");
+    // printf("File execution \"./\" is not implemeted yet\n");
+    nosh_dot_slash(args);
   }
   else {
-    // Create a child process to execute a non builtin command
-    int wstatus;
-    pid_t cpid, w;
-
-    cpid = fork();
-    if (cpid == -1) {
-      perror("nosh: fork");
-      exit(EXIT_FAILURE);
-    }
-
-    if (cpid == 0) {
-      // Child executes command
-      if (execvp(args[0], args) == -1) {
-	// Print an error message if execvp fails
-	// perror("nosh: execvp");
-	printf("Command '%s' not found, but may be installable\n", args[0]);
-      }
-      exit(EXIT_FAILURE);
-
-    }
-    else {
-      // Parent waits for child
-      do {
-	w = waitpid(cpid, &wstatus, WUNTRACED);
-	if (w == -1) {
-	  perror("nosh: waitpid");
-	  exit(EXIT_FAILURE);
-	}
-	if (WIFEXITED(wstatus)) {
-	  // printf("exited, status=%d\n", WEXITSTATUS(wstatus));
-	  return 0;
-	}
-	else if (WIFSIGNALED(wstatus)) {
-	  printf("killed by signal %d\n", WTERMSIG(wstatus));
-	}
-	else if (WIFSTOPPED(wstatus)) {
-	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
-	}
-	else if (WIFCONTINUED(wstatus)) {
-	  printf("continued\n");
-	}
-      } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-    
-      return 1;
-
-    }
+    nosh_launch_cmd(args);
   }
+  return 0;
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+int nosh_launch_cmd(char **args) {
+
+  // Create a child process to execute a non builtin command
+  int wstatus;
+  pid_t cpid, w;
+
+  cpid = fork();
+  if (cpid == -1) {
+    perror("nosh: fork");
+    exit(EXIT_FAILURE);
+  }
+
+  if (cpid == 0) {
+    // Child executes command
+    if (execvp(args[0], args) == -1) {
+      // Print an error message if execvp fails
+      // perror("nosh: execvp");
+      printf("Command '%s' not found, but may be installable\n", args[0]);
+    }
+    exit(EXIT_FAILURE);
+
+  }
+  else {
+    // Parent waits for child
+    do {
+      w = waitpid(cpid, &wstatus, WUNTRACED);
+      if (w == -1) {
+	perror("nosh: waitpid");
+	exit(EXIT_FAILURE);
+      }
+      if (WIFEXITED(wstatus)) {
+	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
+	return 0;
+      }
+      else if (WIFSIGNALED(wstatus)) {
+	printf("killed by signal %d\n", WTERMSIG(wstatus));
+      }
+      else if (WIFSTOPPED(wstatus)) {
+	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+      }
+      else if (WIFCONTINUED(wstatus)) {
+	printf("continued\n");
+      }
+    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    
+    return 1;
+
+  }
+
   return 0;
 }
 
@@ -295,6 +367,7 @@ char **nosh_str_split(char *aStr, const char aDelim) {
   while (token) {
 
     assert(idx < count);
+    // Equal to "result[idx++] = strdup(token)"
     *(result + idx++) = strdup(token);
     token = strtok(NULL, delim);
 

@@ -18,5 +18,6 @@ void nosh_pwd();
 void nosh_clear();
 void nosh_remove_arg0(char **args);
 void nosh_exec(char **args);
+void nosh_dot_slash(char **args);
 
 #endif
