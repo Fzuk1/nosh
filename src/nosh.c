@@ -41,11 +41,16 @@ int nosh_launch_cmd(char **args);
 /*------------------------------------------------------------------------------------------*/
 
 int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
-
+  /*
+    Entry point.
+    Setup configuration.
+    Cleanup after finishing execution.
+  */
+  
   // Load config files, like cmd history
 
   
-  // Set the SHELL enviroment variable
+  // Set the SHELL and PWD enviroment variables
   char path[PATH_MAX];
   ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
   if (len == -1)
@@ -54,7 +59,9 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
     path[len] = '\0';
     if (setenv("SHELL", path, 1) == -1)
       perror("nosh: setenv");
-
+    if (!getenv("PWD"))
+      if (setenv("PWD", getenv("HOME"), 1) == -1)
+	perror("nosh: setenv");
 
     // Main loop
     nosh_shell_loop();
@@ -70,11 +77,17 @@ int main(int /*argc*/, char **/*argv*/, char **/*envp*/) {
 /*------------------------------------------------------------------------------------------*/
 
 void nosh_shell_loop() {
-  
+  /*
+    Print prompt.
+    Read in line.
+    Split line into args.
+    Execute cmd with args.
+  */
+
   char *line;
   char **args;
   int status;
-    
+  
   do {
     // Print "PATH-#" as the input prompt, to always know where you are
     char *curr_path = getenv("PWD");
@@ -88,7 +101,7 @@ void nosh_shell_loop() {
     }
     
     args = nosh_str_split(line, ' ');
-    // Search for split up args of type ["Hello,] [World"] or [(1] [+] [2)]
+    // Search for split up args of type ["Hello,] [World"]
     nosh_search_split_quotes(args);
     status = nosh_execute_cmd(args);
 
@@ -104,6 +117,10 @@ void nosh_shell_loop() {
 /*------------------------------------------------------------------------------------------*/
 
 char *nosh_read_line() {
+  /*
+    Read a line from stdin to buffer.
+  */
+  
   int bufsize = MAX_LINE_SIZE;
   int position = 0;
   char *buffer = malloc(sizeof(char) * MAX_LINE_SIZE);
@@ -143,22 +160,20 @@ char *nosh_read_line() {
 /*------------------------------------------------------------------------------------------*/
 
 void nosh_search_split_quotes(char **args) {
-  /* TODO: For commands like 'git commit -m "msg with spaces"', 
-           I need to make everything between "" or () into one arg
-     NOT DONE YET!
-     Cant do arg2: "..." arg3: ... arg4: ...
-     arg3 and arg4 would be ignored since split arg2 gets NULL terminated
+  /*
+    Search in the arguments for quotes and combine the args between quotes.
   */
 
   char *first_quote = NULL;
   char *second_quote = NULL;
+  int i = 0;
+  int j;
   
-  // do {
+  do {
     // Find out where first quote is
-    int i, j;
     int done = false;
     first_quote = NULL;
-    for (i = 0; args[i] && !done; i++) {
+    for (; args[i] && !done; i++) {
       for (j = 0; j < (int) strlen(args[i]); j++) {
 	if (args[i][j] == '"') {
 	  first_quote = &args[i][j];
@@ -192,23 +207,27 @@ void nosh_search_split_quotes(char **args) {
       for (int m = i+1; m <= k; m++) {
 	strcat(args[i], " ");
 	strcat(args[i], args[m]);
-	args[m] = NULL; // TODO: Remove this! Cant do args after quotes right now
       }
-      /*
-      // TODO: Clean up remainders, find out how many times the outer loop has to run
-      for (int n = i; k-n >= 0; n++)
-	for (int m = i; k-m >= 0; m++) {
-	  args[m+1] = args[m+2];
+
+      // Clean up remainders
+      for (; k - 1 > 0; k--)
+	for (int m = i + 1; args[m]; m++) {
+	  args[m] = args[m+1];
 	}
-      */
+
+      i++;
     }
-    //} while(first_quote && second_quote);
+  } while(first_quote && second_quote);
 }
 
 /*------------------------------------------------------------------------------------------*/
 
 int nosh_execute_cmd(char **args) {
-
+  /*
+    If cmd is builtin execute the command.
+    If cmd is found in PATH, launch it.
+  */
+    
   const char *builtins[] = {
     "cd",
     "echo",
@@ -220,17 +239,20 @@ int nosh_execute_cmd(char **args) {
     NULL
   };
 
+  // Check for ./ file execution
   if (args[0][0] == '.' && args[0][1] == '/') {
     nosh_dot_slash(args);
     return 0;
   }
-  
+
+  // Then check for builtin commands
   int i;
   for (i = 0; builtins[i]; i++) {
     if (strcmp(args[0], builtins[i]) == 0)
       break;
   }
-  
+
+  // Execute based on checks
   switch(i) {
   case 0: {
     if (!args[1] || args[2]) {
@@ -300,7 +322,11 @@ int nosh_execute_cmd(char **args) {
 /*------------------------------------------------------------------------------------------*/
 
 int nosh_launch_cmd(char **args) {
-
+  /*
+    Create a child process and execute the cmd there.
+    Parent waits for child to finish execution.
+  */
+  
   // Create a child process to execute a non builtin command
   int wstatus;
   pid_t cpid, w;
@@ -315,7 +341,6 @@ int nosh_launch_cmd(char **args) {
     // Child executes command
     if (execvp(args[0], args) == -1) {
       // Print an error message if execvp fails
-      // perror("nosh: execvp");
       printf("Command '%s' not found, but may be installable\n", args[0]);
     }
     exit(EXIT_FAILURE);
@@ -330,8 +355,7 @@ int nosh_launch_cmd(char **args) {
 	exit(EXIT_FAILURE);
       }
       if (WIFEXITED(wstatus)) {
-	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
-	return 0;
+        return 0;
       }
       else if (WIFSIGNALED(wstatus)) {
 	printf("killed by signal %d\n", WTERMSIG(wstatus));
@@ -356,7 +380,11 @@ int nosh_launch_cmd(char **args) {
 /*------------------------------------------------------------------------------------------*/
 
 char **nosh_str_split(char *aStr, const char aDelim) {
-
+  /*
+    Split aStr at every instance of aDelim.
+    Return a char* array of split aStr.
+  */
+  
   char** result = 0;
   size_t count = 0;
   char* tmp = aStr;

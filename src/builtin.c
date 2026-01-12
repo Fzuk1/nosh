@@ -9,7 +9,7 @@
  * - Command history with <Arrow-Up> and <Arrow-Down>
  * - TAB Completion
  * - In command navigation with <Arrow-Left> and <Arrow-right>
- * - ... (TBD)
+ * - (TBD)
  */
 
 #include <stdio.h>
@@ -27,6 +27,11 @@
 
 
 void nosh_set_pwd() {
+  /*
+    Get current working directory.
+    Set PWD enviroment variable.
+  */
+
   char *cwd = malloc(sizeof(char) * MAX_PATH_SIZE);
   if (!cwd) {
     perror("nosh: malloc");
@@ -41,6 +46,12 @@ void nosh_set_pwd() {
 }
 
 void nosh_cd(char *path) {
+  /*
+    Change current working directory to path.
+    Handle special inputs like '~' for the home directory.
+    Keep PWD enviroment variable up to date.
+  */
+
   // Make '~' = $HOME
   if (path[0] == '~') {
     char *changed_path = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(path) + 2));
@@ -84,6 +95,12 @@ void nosh_cd(char *path) {
 
 
 void nosh_echo(char **args) {
+  /*
+    Print args back out to stdout.
+    Handle $ENVVAR for enviroment variables.
+    TODO: Handle #(EQUATION), to add math capabilities.
+  */
+
   nosh_remove_arg0(args);
   if (args[0][0] == '$') {
     // Remove '$' from args[0], to pass it correctly to getenv
@@ -107,6 +124,10 @@ void nosh_echo(char **args) {
 
 
 void nosh_help() {
+  /*
+    Print helpful information for the user.
+  */
+  
   printf("Nosh Shell ");
   printf("Builtin Commands:\n");
   printf("\tcd [PATH] - Changes directory to PATH.\n");
@@ -121,14 +142,21 @@ void nosh_help() {
 
 
 void nosh_pwd() {
+  /*
+    Print current working directory.
+  */
+  
   char *pwd = getenv("PWD");
   printf("%s\n", pwd);
 }
 
 
 void nosh_clear() {
+  /*
+    Clear the terminal emulators screen.
+  */
+
   // TODO: Maybe make it better.
-  // UNIMPLEMENTED;
 
   // \033[3J → clear scrollback buffer (not POSIX, but widely supported)
   printf("\033[3J\033[2J\033[H");
@@ -140,12 +168,20 @@ void nosh_clear() {
 
 
 void nosh_remove_arg0(char **args) {
+  /*
+    Remove the first argument of args.
+  */
+
   for (int i = 0; args[i]; i++) {
     args[i] = args[i + 1];
   }
 }
 
 void nosh_exec(char **args) {
+  /*
+    Replace current process with program and args.
+  */
+
   nosh_remove_arg0(args);
   if (execvp(args[0], args) == -1)
     perror("nosh: exec");
@@ -153,7 +189,11 @@ void nosh_exec(char **args) {
 
 
 void nosh_dot_slash(char **args) {
-  
+  /*
+    Create a child process.
+    Execute a program not found in PATH.
+  */
+
   // Create a child process to execute a non builtin command
   int wstatus;
   pid_t cpid, w;
@@ -183,8 +223,7 @@ void nosh_dot_slash(char **args) {
 	exit(EXIT_FAILURE);
       }
       if (WIFEXITED(wstatus)) {
-	// printf("exited, status=%d\n", WEXITSTATUS(wstatus));
-	return;
+        return;
       }
       else if (WIFSIGNALED(wstatus)) {
 	printf("killed by signal %d\n", WTERMSIG(wstatus));
