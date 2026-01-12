@@ -164,19 +164,19 @@ void nosh_search_split_quotes(char **args) {
     Search in the arguments for quotes and combine the args between quotes.
   */
 
-  char *first_quote = NULL;
-  char *second_quote = NULL;
+  char *firstQuote = NULL;
+  char *secondQuote = NULL;
   int i = 0;
   int j;
   
   do {
     // Find out where first quote is
     int done = false;
-    first_quote = NULL;
+    firstQuote = NULL;
     for (; args[i] && !done; i++) {
       for (j = 0; j < (int) strlen(args[i]); j++) {
 	if (args[i][j] == '"') {
-	  first_quote = &args[i][j];
+	  firstQuote = &args[i][j];
 	  done = true;
 	  i--;
 	  break;
@@ -188,12 +188,12 @@ void nosh_search_split_quotes(char **args) {
     // Find out where second quote is
     int k = i;
     int l = j;
-    second_quote = NULL;
+    secondQuote = NULL;
     done = false;
     for (k = i; args[k] && !done; k++) {
       for (l = j + 1; l < (int) strlen(args[k]); l++) {
 	if (args[k][l] == '"') {
-	  second_quote = &args[k][l];
+	  secondQuote = &args[k][l];
 	  done = true;
 	  k--;
 	  break;
@@ -203,7 +203,7 @@ void nosh_search_split_quotes(char **args) {
 
     
     // Move quoted args into one arg
-    if (first_quote && second_quote) {
+    if (firstQuote && secondQuote) {
       for (int m = i+1; m <= k; m++) {
 	strcat(args[i], " ");
 	strcat(args[i], args[m]);
@@ -217,7 +217,7 @@ void nosh_search_split_quotes(char **args) {
 
       i++;
     }
-  } while(first_quote && second_quote);
+  } while(firstQuote && secondQuote);
 }
 
 /*------------------------------------------------------------------------------------------*/
@@ -328,7 +328,7 @@ int nosh_launch_cmd(char **args) {
   */
   
   // Create a child process to execute a non builtin command
-  int wstatus;
+  int wStatus;
   pid_t cpid, w;
 
   cpid = fork();
@@ -349,24 +349,24 @@ int nosh_launch_cmd(char **args) {
   else {
     // Parent waits for child
     do {
-      w = waitpid(cpid, &wstatus, WUNTRACED);
+      w = waitpid(cpid, &wStatus, WUNTRACED);
       if (w == -1) {
 	perror("nosh: waitpid");
 	exit(EXIT_FAILURE);
       }
-      if (WIFEXITED(wstatus)) {
+      if (WIFEXITED(wStatus)) {
         return 0;
       }
-      else if (WIFSIGNALED(wstatus)) {
-	printf("killed by signal %d\n", WTERMSIG(wstatus));
+      else if (WIFSIGNALED(wStatus)) {
+	printf("killed by signal %d\n", WTERMSIG(wStatus));
       }
-      else if (WIFSTOPPED(wstatus)) {
-	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+      else if (WIFSTOPPED(wStatus)) {
+	printf("stopped by signal %d\n", WSTOPSIG(wStatus));
       }
-      else if (WIFCONTINUED(wstatus)) {
+      else if (WIFCONTINUED(wStatus)) {
 	printf("continued\n");
       }
-    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    } while (!WIFEXITED(wStatus) && !WIFSIGNALED(wStatus));
     
     return 1;
 

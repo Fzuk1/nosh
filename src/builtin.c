@@ -54,33 +54,33 @@ void nosh_cd(char *path) {
 
   // Make '~' = $HOME
   if (path[0] == '~') {
-    char *changed_path = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(path) + 2));
-    if (!changed_path) {
+    char *changedPath = malloc(sizeof(char) * (strlen(getenv("HOME")) + strlen(path) + 2));
+    if (!changedPath) {
       perror("nosh: malloc");
       exit(EXIT_FAILURE);
     }
 
-    // Write the path from $HOME to changed_paths memory address
+    // Write the path from $HOME to changedPaths memory address
     char *home_path = getenv("HOME");
     for (int i = 0; home_path[i]; i++) {
-      changed_path[i] = home_path[i];
+      changedPath[i] = home_path[i];
     }
 
     // Remove first char (~) from path, to combine $HOME with path
     for (int i = 0; i < (int)strlen(path); i++) {
       path[i] = path[i + 1];
     }
-    strcat(changed_path, path);
+    strcat(changedPath, path);
     
     // Chdir normally
-    if (!chdir(changed_path)) {
+    if (!chdir(changedPath)) {
       nosh_set_pwd();
     }
     else {
       perror("nosh: cd");
     }
 
-    free(changed_path);
+    free(changedPath);
   }
   else {
     // Just change directory to path
@@ -195,7 +195,7 @@ void nosh_dot_slash(char **args) {
   */
 
   // Create a child process to execute a non builtin command
-  int wstatus;
+  int wStatus;
   pid_t cpid, w;
 
   cpid = fork();
@@ -217,24 +217,24 @@ void nosh_dot_slash(char **args) {
   else {
     // Parent waits for child
     do {
-      w = waitpid(cpid, &wstatus, WUNTRACED);
+      w = waitpid(cpid, &wStatus, WUNTRACED);
       if (w == -1) {
 	perror("nosh: waitpid");
 	exit(EXIT_FAILURE);
       }
-      if (WIFEXITED(wstatus)) {
+      if (WIFEXITED(wStatus)) {
         return;
       }
-      else if (WIFSIGNALED(wstatus)) {
-	printf("killed by signal %d\n", WTERMSIG(wstatus));
+      else if (WIFSIGNALED(wStatus)) {
+	printf("killed by signal %d\n", WTERMSIG(wStatus));
       }
-      else if (WIFSTOPPED(wstatus)) {
-	printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+      else if (WIFSTOPPED(wStatus)) {
+	printf("stopped by signal %d\n", WSTOPSIG(wStatus));
       }
-      else if (WIFCONTINUED(wstatus)) {
+      else if (WIFCONTINUED(wStatus)) {
 	printf("continued\n");
       }
-    } while (!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    } while (!WIFEXITED(wStatus) && !WIFSIGNALED(wStatus));
     
     return;
 
