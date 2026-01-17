@@ -1,3 +1,8 @@
 nosh
 test
 test.*
+.clangd
+cmake/
+CMakeLists.txt
+.clang-format
+FileAdded.sh
