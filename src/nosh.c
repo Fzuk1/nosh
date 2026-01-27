@@ -81,7 +81,7 @@ void nosh_shell_loop() {
     do {
         // Print "PATH-#" as the input prompt, to always know where you are
         char *curr_path = getenv("PWD");
-        printf("%s$ ", curr_path);
+        printf("\033[34;1m%s\033[0m$ ", curr_path);
 
         line = nosh_read_line();
         // Check for enter press
